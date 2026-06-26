@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light mode — "paper + ink" */
+  --paper: #f8fafc; /* Slate-50 */
+  --surface: #ffffff;
+  --surface-elevated: #f1f5f9;
+  --ink: #0f172a; /* Slate-900 */
+  --ink-soft: #475569; /* Slate-600 */
+  --line: #e2e8f0; /* Slate-200 */
+  --line-strong: #cbd5e1; /* Slate-300 */
+  --accent: #6366f1; /* Indigo-500 */
+  --accent-soft: #e0e7ff; /* Indigo-100 */
+  --accent-glow: rgba(99, 102, 241, 0.2);
+  --amber: #f59e0b;
+  --emerald: #10b981;
+  --rose: #ef4444;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.08);
+  --shadow-glow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  --radius-lg: 12px;
+
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-handdrawn: 'Kalam', cursive;
+}
+
+.dark {
+  /* Dark mode — "Excalidraw deep space" */
+  --paper: #121214;
+  --surface: #1e1e24;
+  --surface-elevated: #282830;
+  --ink: #ececf1;
+  --ink-soft: #9da3ae;
+  --line: #2d2d38;
+  --line-strong: #3f3f50;
+  --accent: #818cf8; /* Indigo-400 */
+  --accent-soft: #252538;
+  --accent-glow: rgba(129, 140, 248, 0.25);
+  --amber: #fbbf24;
+  --emerald: #34d399;
+  --rose: #f87171;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 3px rgba(129, 140, 248, 0.3);
+  --radius-lg: 12px;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html,
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+/* Custom scrollbar to match the whiteboard studio theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-soft);
+}
+
+/* Glassmorphism sidebar / floating dock classes */
+.toolbar-glass {
+  background-color: var(--surface);
+  border-right: 1px solid var(--line);
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.dark .toolbar-glass {
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Premium Floating Panels */
+.floating-panel {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tool Buttons styles */
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  width: 30px;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  background-color: transparent;
+  border: 1px solid transparent;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tool-btn:hover:not(:disabled) {
+  background-color: var(--surface-elevated);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.tool-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.tool-btn.active {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.dark .tool-btn.active {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Swatch Buttons */
+.swatch-btn {
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.swatch-btn:hover {
+  transform: scale(1.12);
+}
+
+.swatch-btn.active {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+/* Vertical range slider styling */
+.vertical-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--line-strong);
+  border-radius: 999px;
+  outline: none;
+  transition: background 0.15s ease;
+}
+
+.vertical-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease;
+}
+
+.vertical-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  background: var(--accent);
+}
+
+.vertical-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease;
+}
+
+.vertical-slider::-moz-range-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* Custom handwriting utility */
+.font-handdrawn {
+  font-family: var(--font-handdrawn), cursive;
+}
+
+/* Animations */
+@keyframes draw-in {
+  from {
+    stroke-dashoffset: 240;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw-in {
+  stroke-dasharray: 240;
+  animation: draw-in 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
