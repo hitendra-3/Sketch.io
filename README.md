@@ -37,19 +37,14 @@ graph TD
 
 ## 🛠️ Quick Start
 
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 7860 --reload
-```
-
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+1. Install all dependencies:
+   ```bash
+   npm run install:all
+   ```
+2. Start both frontend and backend concurrently:
+   ```bash
+   npm run dev
+   ```
 
 ---
 
