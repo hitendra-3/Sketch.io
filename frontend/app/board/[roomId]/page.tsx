@@ -363,6 +363,16 @@ export default function BoardPage() {
                 tool: meta?.tool,
               })
             }
+            onStrokeDelete={(strokeId) => {
+              undoStackRef.current = undoStackRef.current.filter((s) => s.strokeId !== strokeId);
+              redoStackRef.current = redoStackRef.current.filter((s) => s.strokeId !== strokeId);
+              setUndoLen(undoStackRef.current.length);
+              setRedoLen(redoStackRef.current.length);
+              send({ type: "undo", strokeId });
+            }}
+            onStrokeUpdate={(stroke) => {
+              send({ type: "redo", stroke });
+            }}
           />
 
           {/* Remote cursors translated to zoom/pan */}

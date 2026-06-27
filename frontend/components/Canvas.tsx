@@ -1,7 +1,7 @@
 "use client";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import rough from "roughjs";
-import type { Point, Stroke, Tool } from "@/lib/types";
+import type { Point, Stroke, StrokeMask, Tool } from "@/lib/types";
 
 // ─── Seeded PRNG (xorshift32) ─────────────────────────────────────────────────
 function hashStr(s: string): number {
@@ -27,6 +27,7 @@ function distToSegment(x: number, y: number, x1: number, y1: number, x2: number,
 }
 
 function hitTest(stroke: Stroke, x: number, y: number): boolean {
+  if (stroke.tool === "eraser") return false;
   if (stroke.points.length === 0) return false;
   const points = stroke.points;
 
@@ -70,6 +71,61 @@ function hitTest(stroke: Stroke, x: number, y: number): boolean {
     const p = points[i];
     const dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
     if (dist < Math.max(8, stroke.width * 1.5)) return true;
+  }
+  return false;
+}
+
+function hitTestWithEraser(stroke: Stroke, x: number, y: number, eraserWidth: number): boolean {
+  if (stroke.tool === "eraser") return false;
+  if (stroke.points.length === 0) return false;
+  const points = stroke.points;
+  const threshold = Math.max(12, (stroke.width + eraserWidth) / 2 + 4);
+
+  if (
+    stroke.tool === "rect" ||
+    stroke.tool === "diamond" ||
+    stroke.tool === "triangle" ||
+    stroke.tool === "star" ||
+    stroke.tool === "hexagon" ||
+    stroke.tool === "heart"
+  ) {
+    const p0 = points[0];
+    const p1 = points[points.length - 1];
+    const minX = Math.min(p0.x, p1.x);
+    const maxX = Math.max(p0.x, p1.x);
+    const minY = Math.min(p0.y, p1.y);
+    const maxY = Math.max(p0.y, p1.y);
+    return x >= minX - threshold && x <= maxX + threshold && y >= minY - threshold && y <= maxY + threshold;
+  }
+
+  if (stroke.tool === "circle") {
+    const p0 = points[0];
+    const p1 = points[points.length - 1];
+    const cx = (p0.x + p1.x) / 2;
+    const cy = (p0.y + p1.y) / 2;
+    const rx = Math.abs(p1.x - p0.x) / 2;
+    const ry = Math.abs(p1.y - p0.y) / 2;
+    if (rx === 0 || ry === 0) return false;
+    const dx = (x - cx) / (rx + threshold);
+    const dy = (y - cy) / (ry + threshold);
+    return dx * dx + dy * dy <= 1.0;
+  }
+
+  if (stroke.tool === "line" || stroke.tool === "arrow") {
+    const p0 = points[0];
+    const p1 = points[points.length - 1];
+    return distToSegment(x, y, p0.x, p0.y, p1.x, p1.y) < threshold;
+  }
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    let dist = Infinity;
+    if (i > 0) {
+      dist = distToSegment(x, y, points[i - 1].x, points[i - 1].y, p.x, p.y);
+    } else {
+      dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+    }
+    if (dist < threshold) return true;
   }
   return false;
 }
@@ -281,6 +337,7 @@ interface CanvasProps {
   onStrokePoint: (strokeId: string, point: Point) => void;
   onStrokeEnd: (strokeId: string, stroke: Stroke) => void;
   onStrokeDelete?: (strokeId: string) => void;
+  onStrokeUpdate?: (stroke: Stroke) => void;
   onCursorMove: (point: Point, metadata?: { brushWidth: number; tool: Tool }) => void;
   disabled?: boolean;
 }
@@ -290,13 +347,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     tool, color, width,
     fillStyle, fillColor, roughness,
     zoom, panX, panY, setPan, setZoom,
-    onStrokeStart, onStrokePoint, onStrokeEnd, onStrokeDelete,
+    onStrokeStart, onStrokePoint, onStrokeEnd, onStrokeDelete, onStrokeUpdate,
     onCursorMove, disabled,
   },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const bgCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const historyRef = useRef<Stroke[]>([]);
   const activeRef = useRef<Map<string, Stroke>>(new Map());
@@ -313,6 +372,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef<Point>({ x: 0, y: 0 });
   const dragStartPointsRef = useRef<Point[]>([]);
+  const dragStartMasksRef = useRef<StrokeMask[]>([]);
 
   // Panning
   const isPanningRef = useRef(false);
@@ -333,18 +393,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
-
-  // Delete key for selected stroke
-  useEffect(() => {
-    const onDel = (e: KeyboardEvent) => {
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedStrokeId && tool === "select") {
-        onStrokeDelete?.(selectedStrokeId);
-        setSelectedStrokeId(null);
-      }
-    };
-    window.addEventListener("keydown", onDel);
-    return () => window.removeEventListener("keydown", onDel);
-  }, [selectedStrokeId, tool, onStrokeDelete]);
 
   // Convert client coordinates → virtual canvas coordinates
   const toVirtual = useCallback((cx: number, cy: number): Point => {
@@ -493,22 +541,56 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         }
       }
     }
+
+    // After drawing the stroke main content, we apply its masks
+    if (stroke.masks && stroke.masks.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.strokeStyle = "rgba(0,0,0,1)";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      stroke.masks.forEach((mask) => {
+        ctx.lineWidth = mask.width;
+        ctx.beginPath();
+        if (mask.points.length > 0) {
+          ctx.moveTo(mask.points[0].x, mask.points[0].y);
+          for (let i = 1; i < mask.points.length; i++) {
+            ctx.lineTo(mask.points[i].x, mask.points[i].y);
+          }
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    }
   }, []);
 
   const redrawAll = useCallback((strokes: Stroke[]) => {
     const ctx = ctxRef.current;
     const canvas = canvasRef.current;
-    if (!ctx || !canvas) return;
+    const bgCtx = bgCtxRef.current;
+    const bgCanvas = bgCanvasRef.current;
+    if (!ctx || !canvas || !bgCtx || !bgCanvas) return;
 
+    // 1. Draw/Redraw Background Grid Canvas
+    bgCtx.save();
+    bgCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+    const dpr = window.devicePixelRatio || 1;
+    bgCtx.scale(dpr * zoom, dpr * zoom);
+    bgCtx.translate(panX, panY);
+
+    drawInfiniteGrid(bgCtx, bgCanvas.width / (dpr * zoom), bgCanvas.height / (dpr * zoom), zoom, panX, panY);
+    bgCtx.restore();
+
+    // 2. Draw/Redraw Foreground Strokes Canvas
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const dpr = window.devicePixelRatio || 1;
     ctx.scale(dpr * zoom, dpr * zoom);
     ctx.translate(panX, panY);
-
-    drawInfiniteGrid(ctx, canvas.width / (dpr * zoom), canvas.height / (dpr * zoom), zoom, panX, panY);
 
     historyRef.current = strokes;
     strokes.forEach(drawStroke);
@@ -548,18 +630,48 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
+    const bgCanvas = bgCanvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (!canvas || !container || !bgCanvas) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = container.getBoundingClientRect();
+    
+    // Resize drawing canvas
     canvas.width  = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
     canvas.style.width  = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
     const ctx = canvas.getContext("2d");
     if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctxRef.current = ctx; }
+
+    // Resize background canvas
+    bgCanvas.width  = Math.max(1, Math.floor(rect.width * dpr));
+    bgCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    bgCanvas.style.width  = `${rect.width}px`;
+    bgCanvas.style.height = `${rect.height}px`;
+    const bgCtx = bgCanvas.getContext("2d");
+    if (bgCtx) { bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0); bgCtxRef.current = bgCtx; }
+
     redrawAll(historyRef.current);
   }, [redrawAll]);
+
+  const deleteStrokeLocal = useCallback((strokeId: string) => {
+    historyRef.current = historyRef.current.filter((s) => s.strokeId !== strokeId);
+    redrawAll(historyRef.current);
+    onStrokeDelete?.(strokeId);
+  }, [onStrokeDelete, redrawAll]);
+
+  // Delete key for selected stroke
+  useEffect(() => {
+    const onDel = (e: KeyboardEvent) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedStrokeId && tool === "select") {
+        deleteStrokeLocal(selectedStrokeId);
+        setSelectedStrokeId(null);
+      }
+    };
+    window.addEventListener("keydown", onDel);
+    return () => window.removeEventListener("keydown", onDel);
+  }, [selectedStrokeId, tool, deleteStrokeLocal]);
 
   useEffect(() => {
     resizeCanvas();
@@ -679,6 +791,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         isDraggingRef.current = true;
         dragStartRef.current = point;
         dragStartPointsRef.current = clicked.points.map((p) => ({ ...p }));
+        dragStartMasksRef.current = clicked.masks ? clicked.masks.map((mask) => ({
+          width: mask.width,
+          points: mask.points.map((mp) => ({ ...mp })),
+        })) : [];
       } else {
         setSelectedStrokeId(null);
       }
@@ -750,6 +866,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         const dx = point.x - dragStartRef.current.x;
         const dy = point.y - dragStartRef.current.y;
         clicked.points = dragStartPointsRef.current.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+        if (clicked.masks && dragStartMasksRef.current) {
+          clicked.masks = dragStartMasksRef.current.map((mask) => ({
+            width: mask.width,
+            points: mask.points.map((mp) => ({ x: mp.x + dx, y: mp.y + dy })),
+          }));
+        }
         redrawAll(historyRef.current);
       }
       return;
@@ -816,8 +938,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       isDraggingRef.current = false;
       const clicked = historyRef.current.find((s) => s.strokeId === selectedStrokeId);
       if (clicked) {
-        onStrokeDelete?.(selectedStrokeId);
-        onStrokeEnd(selectedStrokeId, clicked);
+        deleteStrokeLocal(selectedStrokeId);
+        historyRef.current = [...historyRef.current, clicked];
+        redrawAll(historyRef.current);
+        onStrokeUpdate?.(clicked);
       }
       return;
     }
@@ -831,9 +955,26 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (!strokeId) return;
     const stroke = activeRef.current.get(strokeId);
     if (stroke) {
-      historyRef.current = [...historyRef.current, stroke];
       activeRef.current.delete(strokeId);
-      onStrokeEnd(strokeId, stroke);
+      
+      if (stroke.tool === "eraser") {
+        historyRef.current.forEach((existingStroke) => {
+          const intersects = stroke.points.some((p) => hitTestWithEraser(existingStroke, p.x, p.y, stroke.width));
+          if (intersects) {
+            if (!existingStroke.masks) existingStroke.masks = [];
+            existingStroke.masks.push({
+              width: stroke.width,
+              points: stroke.points.map((p) => ({ x: p.x, y: p.y })),
+            });
+            onStrokeDelete?.(existingStroke.strokeId);
+            onStrokeUpdate?.(existingStroke);
+          }
+        });
+        redrawAll(historyRef.current);
+      } else {
+        historyRef.current = [...historyRef.current, stroke];
+        onStrokeEnd(strokeId, stroke);
+      }
     }
   };
 
@@ -851,9 +992,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }`}
       onMouseLeave={() => setCursorPos(null)}
     >
+      {/* Background dot grid canvas */}
+      <canvas
+        ref={bgCanvasRef}
+        className="absolute inset-0 h-full w-full pointer-events-none bg-paper"
+      />
+      {/* Drawing canvas */}
       <canvas
         ref={canvasRef}
-        className="h-full w-full touch-none bg-paper"
+        className="absolute inset-0 h-full w-full touch-none bg-transparent"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endStroke}

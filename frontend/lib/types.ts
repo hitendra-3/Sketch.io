@@ -25,6 +25,11 @@ export interface Point {
   y: number;
 }
 
+export interface StrokeMask {
+  width: number;
+  points: Point[];
+}
+
 export interface Stroke {
   strokeId: string;
   color: string;
@@ -35,6 +40,7 @@ export interface Stroke {
   fillStyle?: "hachure" | "cross-hatch" | "solid" | "none";
   fillColor?: string;
   roughness?: number;
+  masks?: StrokeMask[];
 }
 
 export interface RemoteUser {
