@@ -43,6 +43,8 @@ export interface Stroke {
   masks?: StrokeMask[];
 }
 
+export type RoomRole = "editor" | "viewer";
+
 export interface RemoteUser {
   id: string;
   name: string;
@@ -59,7 +61,7 @@ export interface CursorState extends RemoteUser {
 
 // ---- Server -> Client ----
 export type ServerMessage =
-  | { type: "init"; clientId: string; color: string; name: string; strokes: Stroke[]; users: RemoteUser[]; userCount: number }
+  | { type: "init"; clientId: string; color: string; name: string; role: RoomRole; strokes: Stroke[]; users: RemoteUser[]; userCount: number }
   | { type: "user_joined"; user: RemoteUser }
   | { type: "user_left"; id: string }
   | { type: "user_renamed"; id: string; name: string }

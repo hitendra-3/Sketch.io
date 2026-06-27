@@ -550,6 +550,7 @@ interface CanvasProps {
   onStrokeUpdate?: (stroke: Stroke) => void;
   onCursorMove: (point: Point, metadata?: { brushWidth: number; tool: Tool }) => void;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
@@ -558,7 +559,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     fillStyle, fillColor, roughness,
     zoom, panX, panY, setPan, setZoom,
     onStrokeStart, onStrokePoint, onStrokeEnd, onStrokeDelete, onStrokeUpdate,
-    onCursorMove, disabled,
+    onCursorMove, disabled, readOnly,
   },
   ref
 ) {
@@ -1005,7 +1006,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const point = toVirtual(e.clientX, e.clientY);
     lastPointerPosRef.current = point;
 
-    if (tool === "hand" || spacePressed || e.button === 1) {
+    if (readOnly || tool === "hand" || spacePressed || e.button === 1) {
       isPanningRef.current = true;
       panStartRef.current = { x: e.clientX, y: e.clientY };
       panOffsetStartRef.current = { x: panX, y: panY };
@@ -1077,7 +1078,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     // Throttled cursor broadcast — 80ms (was 50ms)
     const now = performance.now();
-    if (now - lastCursorSentRef.current >= 80) {
+    if (!readOnly && now - lastCursorSentRef.current >= 80) {
       lastCursorSentRef.current = now;
       onCursorMove(point, { brushWidth: width, tool });
     }
@@ -1106,7 +1107,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    if (!pointerActiveRef.current || disabled) return;
+    if (!pointerActiveRef.current || disabled || readOnly) return;
     const strokeId = localStrokeIdRef.current;
     if (!strokeId) return;
     const stroke = activeRef.current.get(strokeId);
@@ -1230,7 +1231,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const cursorDiam = Math.max(4, width * zoom);
   const isEraser   = tool === "eraser";
   const isShape    = SHAPE_TOOLS.has(tool);
-  const isPanningCursor = tool === "hand" || spacePressed;
+  const isPanningCursor = readOnly || tool === "hand" || spacePressed;
 
   return (
     <div
@@ -1262,7 +1263,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       />
 
       {/* Local circle cursor */}
-      {cursorPos && !isPanningCursor && tool !== "select" && (
+      {cursorPos && !isPanningCursor && tool !== "select" && !readOnly && (
         <div
           className="pointer-events-none absolute rounded-full"
           style={{

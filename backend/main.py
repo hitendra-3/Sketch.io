@@ -77,6 +77,12 @@ class ConnectedClient:
     websocket: WebSocket
     name: str
     color: str
+    role: str = "editor"  # "editor" or "viewer"
+
+
+WRITE_MESSAGE_TYPES = frozenset({
+    "stroke_start", "stroke_point", "stroke_end", "clear", "undo", "redo",
+})
 
 
 @dataclass
@@ -178,6 +184,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     room_id: str,
     name: Optional[str] = None,
+    role: Optional[str] = None,
 ) -> None:
     await websocket.accept()
 
@@ -187,7 +194,10 @@ async def websocket_endpoint(
     client_id    = str(uuid.uuid4())
     color        = USER_COLORS[len(room.clients) % len(USER_COLORS)]
     display_name = (name or random_name()).strip()[:24] or random_name()
-    client       = ConnectedClient(id=client_id, websocket=websocket, name=display_name, color=color)
+    client_role  = "viewer" if (role or "").strip().lower() == "viewer" else "editor"
+    client       = ConnectedClient(
+        id=client_id, websocket=websocket, name=display_name, color=color, role=client_role,
+    )
 
     existing_users = room.user_list()
     room.clients[client_id] = client
@@ -199,6 +209,7 @@ async def websocket_endpoint(
         "clientId":  client_id,
         "color":     color,
         "name":      display_name,
+        "role":      client_role,
         "strokes":   room.strokes,
         "users":     existing_users,
         "userCount": len(room.clients),
@@ -315,6 +326,9 @@ async def handle_message(
 ) -> None:
     """Dispatch a parsed client→server message."""
     msg_type = msg.get("type")
+
+    if client.role == "viewer" and msg_type in WRITE_MESSAGE_TYPES:
+        return
 
     if msg_type == "pong":
         # Handled inline by ping_loop via the shared dict; nothing else to do.

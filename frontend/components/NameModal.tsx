@@ -5,10 +5,11 @@ import { useState } from "react";
 interface NameModalProps {
   roomId: string;
   defaultName: string;
+  isViewer?: boolean;
   onJoin: (name: string) => void;
 }
 
-export default function NameModal({ roomId, defaultName, onJoin }: NameModalProps) {
+export default function NameModal({ roomId, defaultName, isViewer = false, onJoin }: NameModalProps) {
   const [name, setName] = useState(defaultName);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,10 +34,12 @@ export default function NameModal({ roomId, defaultName, onJoin }: NameModalProp
           Room {roomId}
         </p>
         <h2 className="font-display text-xl font-semibold tracking-tight text-ink">
-          Join the Studio
+          {isViewer ? "Join as Viewer" : "Join the Studio"}
         </h2>
         <p className="mt-1 text-xs text-ink-soft max-w-[280px]">
-          Enter your name so others can see who is drawing on the board.
+          {isViewer
+            ? "You can watch the board live but won't be able to draw or edit."
+            : "Enter your name so others can see who is drawing on the board."}
         </p>
 
         <div className="mt-5 w-full">
@@ -53,7 +56,7 @@ export default function NameModal({ roomId, defaultName, onJoin }: NameModalProp
           type="submit"
           className="mt-4 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-accent/90 hover:shadow active:scale-[0.98]"
         >
-          Enter Whiteboard
+          {isViewer ? "Enter as Viewer" : "Enter Whiteboard"}
         </button>
       </form>
     </div>

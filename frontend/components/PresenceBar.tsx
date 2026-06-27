@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { shareUrlForRoom } from "@/lib/config";
 import type { RemoteUser } from "@/lib/types";
 
 interface PresenceBarProps {
@@ -10,6 +11,7 @@ interface PresenceBarProps {
   selfColor: string;
   userCount: number;
   connectionStatus: "connecting" | "open" | "closed";
+  isViewer?: boolean;
 }
 
 export default function PresenceBar({
@@ -19,27 +21,34 @@ export default function PresenceBar({
   selfColor,
   userCount,
   connectionStatus,
+  isViewer = false,
 }: PresenceBarProps) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"editor" | "viewer" | null>(null);
   const [showUserList, setShowUserList] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setShowUserList(false);
+      }
+      if (shareRef.current && !shareRef.current.contains(event.target as Node)) {
+        setShowShareMenu(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleCopy = async () => {
+  const handleCopy = async (role: "editor" | "viewer") => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      await navigator.clipboard.writeText(shareUrlForRoom(roomId, role));
+      setCopied(role);
+      setShowShareMenu(false);
+      setTimeout(() => setCopied(null), 1800);
     } catch {
       // Clipboard API can fail in insecure contexts; fail silently
     }
@@ -54,20 +63,28 @@ export default function PresenceBar({
   const visible = allUsers.slice(0, 5);
   const overflow = allUsers.length - visible.length;
 
+  const shareButtonLabel = copied ? "Copied!" : "Share link";
+
   return (
     <div className="flex h-14 w-full items-center justify-between gap-3 border-b border-line bg-surface px-4 sm:px-5">
       <div className="flex items-center gap-3">
         <span className="font-display text-sm font-semibold tracking-tight">Sketch.io</span>
         <span className="hidden h-4 w-px bg-line sm:block" />
-        <button
-          onClick={handleCopy}
-          className="hidden items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-ink-soft transition hover:border-accent hover:text-accent sm:flex"
-          title="Copy room link"
-        >
-          <span>{roomId}</span>
-          <CopyIcon />
-        </button>
-        {copied && <span className="hidden text-xs text-emerald-600 sm:block">Copied!</span>}
+        {!isViewer && (
+          <button
+            onClick={() => handleCopy("editor")}
+            className="hidden items-center gap-1.5 rounded-md border border-line px-2.5 py-1 font-mono text-xs text-ink-soft transition hover:border-accent hover:text-accent sm:flex"
+            title="Copy room link"
+          >
+            <span>{roomId}</span>
+            <CopyIcon />
+          </button>
+        )}
+        {isViewer && (
+          <span className="hidden rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-700 sm:inline dark:bg-amber-950/50 dark:text-amber-400">
+            View only
+          </span>
+        )}
       </div>
 
       <div ref={containerRef} className="flex items-center gap-3 sm:gap-4 relative">
@@ -139,18 +156,46 @@ export default function PresenceBar({
           </div>
         )}
 
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:hidden"
-        >
-          Share
-        </button>
-        <button
-          onClick={handleCopy}
-          className="hidden items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:flex"
-        >
-          Share link
-        </button>
+        {/* Share menu — editors only */}
+        {!isViewer && (
+        <div ref={shareRef} className="relative">
+          <button
+            onClick={() => setShowShareMenu(!showShareMenu)}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:hidden"
+          >
+            {copied ? "Copied!" : "Share"}
+          </button>
+          <button
+            onClick={() => setShowShareMenu(!showShareMenu)}
+            className="hidden items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:flex"
+          >
+            {shareButtonLabel}
+            <ChevronDownIcon className={`h-3 w-3 transition-transform duration-150 ${showShareMenu ? "rotate-180" : ""}`} />
+          </button>
+
+          {showShareMenu && (
+            <div className="absolute right-0 top-10 z-50 w-64 rounded-xl border border-line bg-surface p-2 shadow-md animate-fade-in">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft mb-2 px-2 pt-1 text-left">
+                Share as
+              </p>
+              <button
+                onClick={() => handleCopy("editor")}
+                className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
+              >
+                <span className="text-xs font-semibold text-ink">Editor</span>
+                <span className="text-[10px] text-ink-soft">Can draw and edit the board</span>
+              </button>
+              <button
+                onClick={() => handleCopy("viewer")}
+                className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
+              >
+                <span className="text-xs font-semibold text-ink">Viewer</span>
+                <span className="text-[10px] text-ink-soft">Can only view — no drawing</span>
+              </button>
+            </div>
+          )}
+        </div>
+        )}
       </div>
     </div>
   );

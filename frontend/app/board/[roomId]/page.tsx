@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Canvas, { type CanvasHandle } from "@/components/Canvas";
 import Toolbar from "@/components/Toolbar";
 import PresenceBar from "@/components/PresenceBar";
@@ -9,7 +9,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import NameModal from "@/components/NameModal";
 import { wsUrlForRoom } from "@/lib/config";
 import type {
-  ClientMessage, CursorState, Point, RemoteUser,
+  ClientMessage, CursorState, Point, RemoteUser, RoomRole,
   ServerMessage, Stroke, Tool,
 } from "@/lib/types";
 
@@ -26,12 +26,15 @@ const SWATCHES = [
 
 export default function BoardPage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const searchParams = useSearchParams();
+  const roleFromUrl: RoomRole = searchParams.get("role") === "viewer" ? "viewer" : "editor";
+  const isViewer = roleFromUrl === "viewer";
 
   const [hasJoined, setHasJoined]   = useState(false);
   const [name, setName]             = useState("");
 
   // Tool / styling state
-  const [tool, setTool]             = useState<Tool>("pen");
+  const [tool, setTool]             = useState<Tool>(isViewer ? "hand" : "pen");
   const [color, setColor]           = useState("#6366f1");
   const [brushWidth, setBrushWidth] = useState(6);
   const [fillStyle, setFillStyle]   = useState<"hachure" | "cross-hatch" | "solid" | "none">("none");
@@ -88,7 +91,9 @@ export default function BoardPage() {
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadRef   = useRef(false);
   const nameRef   = useRef(name);
+  const roleRef   = useRef(roleFromUrl);
   useEffect(() => { nameRef.current = name; }, [name]);
+  useEffect(() => { roleRef.current = roleFromUrl; }, [roleFromUrl]);
 
   useEffect(() => {
     try { const s = localStorage.getItem("sketchio-name"); if (s) setName(s); } catch {}
@@ -102,9 +107,10 @@ export default function BoardPage() {
 
   // ── Send helper ──────────────────────────────────────────────────────────
   const send = useCallback((msg: ClientMessage | { type: "pong" }) => {
+    if (isViewer && msg.type !== "pong" && msg.type !== "cursor" && msg.type !== "set_name") return;
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-  }, []);
+  }, [isViewer]);
 
   // Flush all buffered stroke_point messages in one shot
   const flushPoints = useCallback(() => {
@@ -207,7 +213,7 @@ export default function BoardPage() {
       if (deadRef.current) return;
       setConnStatus("connecting");
 
-      const url = wsUrlForRoom(roomId, nameRef.current);
+      const url = wsUrlForRoom(roomId, nameRef.current, roleRef.current);
       const ws  = new WebSocket(url);
       wsRef.current = ws;
 
@@ -262,6 +268,7 @@ export default function BoardPage() {
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
+    if (isViewer) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       const ctrl = e.ctrlKey || e.metaKey;
@@ -272,7 +279,7 @@ export default function BoardPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [isViewer]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────
   const handleUndo = () => {
@@ -330,7 +337,7 @@ export default function BoardPage() {
   return (
     <div className="flex h-dvh w-full flex-col bg-paper overflow-hidden select-none">
       {!hasJoined && (
-        <NameModal roomId={roomId} defaultName={name || "Guest"} onJoin={handleJoin} />
+        <NameModal roomId={roomId} defaultName={name || "Guest"} isViewer={isViewer} onJoin={handleJoin} />
       )}
 
       {/* Full-width Presence Header */}
@@ -341,12 +348,14 @@ export default function BoardPage() {
         selfColor={selfColor}
         userCount={userCount}
         connectionStatus={connStatus}
+        isViewer={isViewer}
       />
 
       {/* Main workspace: sidebar toolbar + canvas */}
       <div className="relative flex min-h-0 flex-1">
 
-        {/* Left Sidebar Toolbar */}
+        {/* Left Sidebar Toolbar — hidden for viewers */}
+        {!isViewer && (
         <Toolbar
           tool={tool}
           setTool={(t) => { setTool(t); }}
@@ -360,6 +369,7 @@ export default function BoardPage() {
           canUndo={undoLen > 0}
           canRedo={redoLen > 0}
         />
+        )}
 
         {/* Canvas area */}
         <div className="relative min-w-0 flex-1 overflow-hidden">
@@ -377,6 +387,7 @@ export default function BoardPage() {
             setPan={(x, y) => { setPanX(x); setPanY(y); }}
             setZoom={setZoom}
             disabled={!hasJoined}
+            readOnly={isViewer}
             onStrokeStart={(s) => {
               redoStackRef.current = []; setRedoLen(0);
               // Flush any leftover buffered points from previous stroke
@@ -450,7 +461,8 @@ export default function BoardPage() {
               </button>
             </div>
             
-            {/* Clear Board — two-step confirm */}
+            {/* Clear Board — two-step confirm (editors only) */}
+            {!isViewer && (
             <button
               onClick={handleClearClick}
               className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-medium shadow-md transition-all duration-200 ${
@@ -463,6 +475,12 @@ export default function BoardPage() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></svg>
               <span>{clearConfirm ? "Sure?" : "Clear"}</span>
             </button>
+            )}
+            {isViewer && (
+              <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-mono text-[11px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-400">
+                View only
+              </div>
+            )}
           </div>
 
 
@@ -480,8 +498,8 @@ export default function BoardPage() {
 
           <ThemeToggle className="absolute right-4 top-4 z-30 bg-surface shadow-sm" />
 
-          {/* Shape styling panel — also shown for eraser */}
-          {["pen", "pencil", "marker", "calligraphy", "crayon", "oil", "watercolour", "rect", "circle", "triangle", "line", "arrow", "diamond", "star", "hexagon", "eraser"].includes(tool) && (
+          {/* Shape styling panel — also shown for eraser (editors only) */}
+          {!isViewer && ["pen", "pencil", "marker", "calligraphy", "crayon", "oil", "watercolour", "rect", "circle", "triangle", "line", "arrow", "diamond", "star", "hexagon", "eraser"].includes(tool) && (
             <div
               className="floating-panel absolute right-4 top-14 z-30 flex w-52 flex-col gap-3 p-3 select-none overflow-y-auto"
               style={{ maxHeight: "calc(100% - 96px)", opacity: stylesPanelFaded ? 0.2 : 1, transition: "opacity 0.6s ease" }}
