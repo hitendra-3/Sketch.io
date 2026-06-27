@@ -31,6 +31,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -84,6 +85,8 @@ class Room:
     clients: Dict[str, ConnectedClient] = field(default_factory=dict)
     strokes: List[Dict[str, Any]]       = field(default_factory=list)
     active_strokes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Per-client last cursor timestamp (seconds) for server-side rate limiting
+    cursor_ts: Dict[str, float] = field(default_factory=dict)
     # asyncio task that will delete this room after ROOM_LINGER_SECS if no
     # new client joins; cancelled when a client connects.
     _linger_task: Optional[asyncio.Task] = field(default=None, repr=False)
@@ -91,17 +94,28 @@ class Room:
     async def broadcast(
         self, message: Dict[str, Any], exclude: Optional[str] = None
     ) -> None:
-        dead: List[str] = []
+        """Broadcast to all clients concurrently using asyncio.gather."""
         payload = json.dumps(message)
-        for cid, client in list(self.clients.items()):
-            if cid == exclude:
-                continue
+        targets = [
+            client for cid, client in list(self.clients.items())
+            if cid != exclude
+        ]
+        if not targets:
+            return
+
+        async def _send(client: ConnectedClient) -> Optional[str]:
             try:
                 await client.websocket.send_text(payload)
+                return None
             except Exception:
-                dead.append(cid)
-        for cid in dead:
-            self.clients.pop(cid, None)
+                return client.id
+
+        results = await asyncio.gather(*[_send(c) for c in targets], return_exceptions=False)
+        # Remove any dead clients reported by failed sends
+        for dead_id in results:
+            if dead_id is not None:
+                self.clients.pop(dead_id, None)
+                self.cursor_ts.pop(dead_id, None)
 
     def user_list(self) -> List[Dict[str, str]]:
         return [
@@ -279,6 +293,7 @@ async def websocket_endpoint(
                 pass
     finally:
         room.clients.pop(client_id, None)
+        room.cursor_ts.pop(client_id, None)
         logger.info("client %s left room %s  (%d remaining)", client_id, room_id, len(room.clients))
 
         if room.clients:
@@ -355,6 +370,13 @@ async def handle_message(
         )
 
     elif msg_type == "cursor":
+        # Server-side cursor rate limiting: drop if < 40 ms since last cursor from this client
+        now_ts = time.monotonic()
+        last_ts = room.cursor_ts.get(client_id, 0.0)
+        if now_ts - last_ts < 0.040:   # 40 ms minimum between cursor broadcasts
+            return
+        room.cursor_ts[client_id] = now_ts
+
         await room.broadcast({
             "type":  "cursor",
             "id":    client_id,

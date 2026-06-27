@@ -94,11 +94,46 @@ export default function BoardPage() {
     try { const s = localStorage.getItem("sketchio-name"); if (s) setName(s); } catch {}
   }, []);
 
+  // ── Point-batch buffer (flush once per animation frame) ──────────────────
+  // Accumulates stroke_point messages and sends them in bulk on the next rAF
+  // tick. This cuts WS send frequency from ~60/sec to ~16/sec per user.
+  const pointBatchRef = useRef<Map<string, Point[]>>(new Map());
+  const batchRafRef   = useRef<number | null>(null);
+
   // ── Send helper ──────────────────────────────────────────────────────────
   const send = useCallback((msg: ClientMessage | { type: "pong" }) => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }, []);
+
+  // Flush all buffered stroke_point messages in one shot
+  const flushPoints = useCallback(() => {
+    batchRafRef.current = null;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) { pointBatchRef.current.clear(); return; }
+    pointBatchRef.current.forEach((points, strokeId) => {
+      // Send each accumulated point individually — backend protocol unchanged
+      // but we only hit the JS send() N times once per frame, not per mouse event
+      points.forEach((point) => {
+        ws.send(JSON.stringify({ type: "stroke_point", strokeId, point }));
+      });
+    });
+    pointBatchRef.current.clear();
+  }, []);
+
+  // Queue a stroke_point for the next animation frame flush
+  const sendStrokePoint = useCallback((strokeId: string, point: Point) => {
+    const batch = pointBatchRef.current;
+    const existing = batch.get(strokeId);
+    if (existing) {
+      existing.push(point);
+    } else {
+      batch.set(strokeId, [point]);
+    }
+    if (batchRafRef.current === null) {
+      batchRafRef.current = requestAnimationFrame(flushPoints);
+    }
+  }, [flushPoints]);
 
   // ── Message handler ──────────────────────────────────────────────────────
   const handleMsg = useCallback((msg: ServerMessage | { type: "ping" }) => {
@@ -344,10 +379,16 @@ export default function BoardPage() {
             disabled={!hasJoined}
             onStrokeStart={(s) => {
               redoStackRef.current = []; setRedoLen(0);
+              // Flush any leftover buffered points from previous stroke
+              if (batchRafRef.current !== null) {
+                cancelAnimationFrame(batchRafRef.current);
+                batchRafRef.current = null;
+              }
+              pointBatchRef.current.clear();
               send({ type: "stroke_start", ...s });
             }}
             onStrokePoint={(strokeId, point) =>
-              send({ type: "stroke_point", strokeId, point })
+              sendStrokePoint(strokeId, point)
             }
             onStrokeEnd={(strokeId, stroke) => {
               undoStackRef.current = [...undoStackRef.current, stroke].slice(-MAX_UNDO);

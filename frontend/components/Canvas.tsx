@@ -296,6 +296,222 @@ function renderPuff(
   ctx.restore();
 }
 
+// ─── Draw a single complete stroke onto a given context ───────────────────────
+function getSeed(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = Math.imul(31, h) + id.charCodeAt(i) | 0;
+  return Math.abs(h) || 1;
+}
+
+function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: Stroke) {
+  const rc = rough.canvas(canvas);
+
+  const options = {
+    seed: getSeed(stroke.strokeId),
+    stroke: stroke.color,
+    strokeWidth: stroke.width,
+    fill: stroke.fillStyle && stroke.fillStyle !== "none" ? stroke.fillColor : undefined,
+    fillStyle: stroke.fillStyle && stroke.fillStyle !== "none" ? stroke.fillStyle : undefined,
+    roughness: stroke.roughness !== undefined ? stroke.roughness : 1.2,
+    hachureAngle: 60,
+    hachureGap: Math.max(4, stroke.width * 1.5),
+  };
+
+  if (stroke.points.length === 0) return;
+
+  if (stroke.tool === "rect") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const x = Math.min(p0.x, p1.x), y = Math.min(p0.y, p1.y);
+    const w = Math.abs(p1.x - p0.x), h = Math.abs(p1.y - p0.y);
+    if (w > 0 && h > 0) rc.rectangle(x, y, w, h, options);
+  } else if (stroke.tool === "circle") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
+    const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
+    if (rx > 0 && ry > 0) rc.ellipse(cx, cy, rx * 2, ry * 2, options);
+  } else if (stroke.tool === "triangle") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const tx = (p0.x + p1.x) / 2;
+    rc.polygon([[tx, p0.y], [p1.x, p1.y], [p0.x, p1.y]], options);
+  } else if (stroke.tool === "diamond") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+    const hw = Math.abs(p1.x - p0.x) / 2, hh = Math.abs(p1.y - p0.y) / 2;
+    rc.polygon([[mx, my - hh], [mx + hw, my], [mx, my + hh], [mx - hw, my]], options);
+  } else if (stroke.tool === "hexagon") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
+    const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
+    const verts: [number, number][] = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * Math.PI) / 3 - Math.PI / 2;
+      verts.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
+    }
+    rc.polygon(verts, options);
+  } else if (stroke.tool === "star") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
+    const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
+    const verts: [number, number][] = [];
+    const spikes = 5, step = Math.PI / spikes;
+    let rot = (Math.PI / 2) * 3;
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? ry : ry * 0.4;
+      verts.push([cx + rx * (r / ry) * Math.cos(rot), cy + ry * (r / ry) * Math.sin(rot)]);
+      rot += step;
+    }
+    rc.polygon(verts, options);
+  } else if (stroke.tool === "heart") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
+    const sw = Math.abs(p1.x - p0.x), sh = Math.abs(p1.y - p0.y);
+    const topY = cy - sh / 2, bottomY = cy + sh / 2;
+    const leftX = cx - sw / 2, rightX = cx + sw / 2;
+    const pathD = `M ${cx} ${cy - sh / 4} C ${cx - sw / 4} ${topY}, ${leftX} ${cy - sh / 4}, ${leftX} ${cy + sh / 8} C ${leftX} ${cy + sh / 2}, ${cx - sw / 4} ${bottomY - sh / 8}, ${cx} ${bottomY} C ${cx + sw / 4} ${bottomY - sh / 8}, ${rightX} ${cy + sh / 2}, ${rightX} ${cy + sh / 8} C ${rightX} ${cy - sh / 4}, ${cx + sw / 4} ${topY}, ${cx} ${cy - sh / 4} Z`;
+    rc.path(pathD, options);
+  } else if (stroke.tool === "line") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    rc.line(p0.x, p0.y, p1.x, p1.y, options);
+  } else if (stroke.tool === "arrow") {
+    const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
+    rc.line(p0.x, p0.y, p1.x, p1.y, options);
+    const dx = p1.x - p0.x, dy = p1.y - p0.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const headLen = Math.max(10, stroke.width * 3), angle = Math.PI / 6;
+    const xL = p1.x - headLen * (ux * Math.cos(angle) - uy * Math.sin(angle));
+    const yL = p1.y - headLen * (uy * Math.cos(angle) + ux * Math.sin(angle));
+    const xR = p1.x - headLen * (ux * Math.cos(angle) + uy * Math.sin(angle));
+    const yR = p1.y - headLen * (uy * Math.cos(angle) - ux * Math.sin(angle));
+    rc.line(p1.x, p1.y, xL, yL, options);
+    rc.line(p1.x, p1.y, xR, yR, options);
+  } else if (stroke.tool === "eraser") {
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.strokeStyle = "rgba(0,0,0,1)";
+    ctx.lineWidth = stroke.width;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+    for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    // Freehand drawing tools
+    if (stroke.points.length === 1) {
+      ctx.save();
+      ctx.fillStyle = stroke.color;
+      if (stroke.tool === "marker") ctx.globalAlpha = 0.22;
+      ctx.beginPath();
+      ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      if (stroke.tool === "pen" || stroke.tool === "pencil" || stroke.tool === "marker") {
+        ctx.save();
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.tool === "marker" ? stroke.width * 3.2 : stroke.width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        if (stroke.tool === "marker") ctx.globalAlpha = 0.22;
+        else if (stroke.tool === "pencil") ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length - 1; i++) {
+          const mx = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+          const my = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, mx, my);
+        }
+        const last = stroke.points[stroke.points.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.save();
+        for (let i = 1; i < stroke.points.length; i++) {
+          renderSegment(ctx, stroke, stroke.points[i - 1], stroke.points[i], stroke.width);
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  // Apply masks
+  if (stroke.masks && stroke.masks.length > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.strokeStyle = "rgba(0,0,0,1)";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    stroke.masks.forEach((mask) => {
+      ctx.lineWidth = mask.width;
+      ctx.beginPath();
+      if (mask.points.length > 0) {
+        ctx.moveTo(mask.points[0].x, mask.points[0].y);
+        for (let i = 1; i < mask.points.length; i++) {
+          ctx.lineTo(mask.points[i].x, mask.points[i].y);
+        }
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+  }
+}
+
+// ─── Paint a single incremental freehand segment onto a context ───────────────
+// For shapes, spray, and eraser the caller handles rendering; those return false.
+function paintIncrementalSegment(
+  ctx: CanvasRenderingContext2D,
+  stroke: Stroke,
+  prev: Point,
+  curr: Point,
+  zoom: number, panX: number, panY: number,
+  dpr: number
+): boolean {
+  // These tools need special handling by the caller
+  if (SHAPE_TOOLS.has(stroke.tool) || stroke.tool === "spray" || stroke.tool === "eraser") return false;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr * zoom, dpr * zoom);
+  ctx.translate(panX, panY);
+
+  if (stroke.tool === "pen" || stroke.tool === "pencil" || stroke.tool === "marker") {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.tool === "marker" ? stroke.width * 3.2 : stroke.width;
+    if (stroke.tool === "marker") ctx.globalAlpha = 0.22;
+    else if (stroke.tool === "pencil") ctx.globalAlpha = 0.85;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(curr.x, curr.y); ctx.stroke();
+  } else {
+    renderSegment(ctx, stroke, prev, curr, stroke.width);
+  }
+
+  ctx.restore();
+  return true;
+}
+
+// ─── Paint an eraser segment directly onto the history canvas ─────────────────
+function paintEraserSegmentOnHistory(
+  histCtx: CanvasRenderingContext2D,
+  prev: Point, curr: Point,
+  width: number,
+  zoom: number, panX: number, panY: number,
+  dpr: number
+) {
+  histCtx.save();
+  histCtx.setTransform(1, 0, 0, 1, 0, 0);
+  histCtx.scale(dpr * zoom, dpr * zoom);
+  histCtx.translate(panX, panY);
+  histCtx.globalCompositeOperation = "destination-out";
+  histCtx.strokeStyle = "rgba(0,0,0,1)";
+  histCtx.lineWidth = width;
+  histCtx.lineCap = "round"; histCtx.lineJoin = "round";
+  histCtx.beginPath(); histCtx.moveTo(prev.x, prev.y); histCtx.lineTo(curr.x, curr.y); histCtx.stroke();
+  histCtx.restore();
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 export interface CanvasHandle {
   redrawAll: (strokes: Stroke[]) => void;
@@ -307,12 +523,6 @@ export interface CanvasHandle {
   clearCanvas: () => void;
   updateStroke: (strokeId: string, updates: Partial<Stroke>) => void;
   getStroke: (strokeId: string) => Stroke | undefined;
-}
-
-function getSeed(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = Math.imul(31, h) + id.charCodeAt(i) | 0;
-  return Math.abs(h) || 1;
 }
 
 interface CanvasProps {
@@ -352,37 +562,55 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   },
   ref
 ) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const bgCtxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const historyRef = useRef<Stroke[]>([]);
-  const activeRef = useRef<Map<string, Stroke>>(new Map());
+  // ─── Three canvas layers ──────────────────────────────────────────────────
+  // Layer 0 (bgCanvas):     Dot grid — only redrawn on zoom/pan
+  // Layer 1 (histCanvas):   Completed stroke history — redrawn when strokes commit/remove
+  // Layer 2 (activeCanvas): In-progress strokes — cheap per-point incremental paint
+  const bgCanvasRef    = useRef<HTMLCanvasElement | null>(null);
+  const histCanvasRef  = useRef<HTMLCanvasElement | null>(null);
+  const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const localStrokeIdRef = useRef<string | null>(null);
-  const lastCursorSentRef = useRef(0);
-  const pointerActiveRef = useRef(false);
-  const sprayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastPointerPosRef = useRef<Point | null>(null);
-  const shapeStartRef = useRef<Point | null>(null);
+  const bgCtxRef      = useRef<CanvasRenderingContext2D | null>(null);
+  const histCtxRef    = useRef<CanvasRenderingContext2D | null>(null);
+  const activeCtxRef  = useRef<CanvasRenderingContext2D | null>(null);
+
+  // The interaction canvas (active) also receives pointer events
+  const containerRef  = useRef<HTMLDivElement | null>(null);
+
+  const historyRef   = useRef<Stroke[]>([]);
+  const activeRef    = useRef<Map<string, Stroke>>(new Map());
+
+  const localStrokeIdRef   = useRef<string | null>(null);
+  const lastCursorSentRef  = useRef(0);
+  const pointerActiveRef   = useRef(false);
+  const sprayIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPointerPosRef  = useRef<Point | null>(null);
+  const shapeStartRef      = useRef<Point | null>(null);
+
+  // Zoom/pan refs for use inside callbacks without stale closure
+  const zoomRef  = useRef(zoom);
+  const panXRef  = useRef(panX);
+  const panYRef  = useRef(panY);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { panXRef.current = panX; }, [panX]);
+  useEffect(() => { panYRef.current = panY; }, [panY]);
 
   // Selection state
   const [selectedStrokeId, setSelectedStrokeId] = useState<string | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef<Point>({ x: 0, y: 0 });
+  const isDraggingRef    = useRef(false);
+  const dragStartRef     = useRef<Point>({ x: 0, y: 0 });
   const dragStartPointsRef = useRef<Point[]>([]);
-  const dragStartMasksRef = useRef<StrokeMask[]>([]);
+  const dragStartMasksRef  = useRef<StrokeMask[]>([]);
 
   // Panning
-  const isPanningRef = useRef(false);
-  const panStartRef = useRef<Point>({ x: 0, y: 0 });
-  const panOffsetStartRef = useRef<Point>({ x: 0, y: 0 });
+  const isPanningRef       = useRef(false);
+  const panStartRef        = useRef<Point>({ x: 0, y: 0 });
+  const panOffsetStartRef  = useRef<Point>({ x: 0, y: 0 });
 
   const [spacePressed, setSpacePressed] = useState(false);
 
   // Local cursor circle
-  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [cursorPos, setCursorPos]       = useState<{ x: number; y: number } | null>(null);
   const [cursorVisible, setCursorVisible] = useState(false);
 
   // Spacebar pan toggle
@@ -396,7 +624,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   // Convert client coordinates → virtual canvas coordinates
   const toVirtual = useCallback((cx: number, cy: number): Point => {
-    const c = canvasRef.current;
+    const c = activeCanvasRef.current;
     if (!c) return { x: 0, y: 0 };
     const r = c.getBoundingClientRect();
     return {
@@ -405,204 +633,72 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     };
   }, [zoom, panX, panY]);
 
-  const drawStroke = useCallback((stroke: Stroke) => {
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    if (!canvas || !ctx) return;
-    const rc = rough.canvas(canvas);
+  // ─── Helpers to apply transform to a context ──────────────────────────────
+  const applyTransform = useCallback((ctx: CanvasRenderingContext2D) => {
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr * zoom, dpr * zoom);
+    ctx.translate(panX, panY);
+  }, [zoom, panX, panY]);
 
-    const options = {
-      seed: getSeed(stroke.strokeId),
-      stroke: stroke.color,
-      strokeWidth: stroke.width,
-      fill: stroke.fillStyle && stroke.fillStyle !== "none" ? stroke.fillColor : undefined,
-      fillStyle: stroke.fillStyle && stroke.fillStyle !== "none" ? stroke.fillStyle : undefined,
-      roughness: stroke.roughness !== undefined ? stroke.roughness : 1.2,
-      hachureAngle: 60,
-      hachureGap: Math.max(4, stroke.width * 1.5),
-    };
-
-    if (stroke.points.length === 0) return;
-
-    if (stroke.tool === "rect") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const x = Math.min(p0.x, p1.x), y = Math.min(p0.y, p1.y);
-      const w = Math.abs(p1.x - p0.x), h = Math.abs(p1.y - p0.y);
-      if (w > 0 && h > 0) rc.rectangle(x, y, w, h, options);
-    } else if (stroke.tool === "circle") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
-      const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
-      if (rx > 0 && ry > 0) rc.ellipse(cx, cy, rx * 2, ry * 2, options);
-    } else if (stroke.tool === "triangle") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const tx = (p0.x + p1.x) / 2;
-      rc.polygon([[tx, p0.y], [p1.x, p1.y], [p0.x, p1.y]], options);
-    } else if (stroke.tool === "diamond") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
-      const hw = Math.abs(p1.x - p0.x) / 2, hh = Math.abs(p1.y - p0.y) / 2;
-      rc.polygon([[mx, my - hh], [mx + hw, my], [mx, my + hh], [mx - hw, my]], options);
-    } else if (stroke.tool === "hexagon") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
-      const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
-      const verts: [number, number][] = [];
-      for (let i = 0; i < 6; i++) {
-        const angle = (i * Math.PI) / 3 - Math.PI / 2;
-        verts.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
-      }
-      rc.polygon(verts, options);
-    } else if (stroke.tool === "star") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
-      const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
-      const verts: [number, number][] = [];
-      const spikes = 5, step = Math.PI / spikes;
-      let rot = (Math.PI / 2) * 3;
-      for (let i = 0; i < spikes * 2; i++) {
-        const r = i % 2 === 0 ? ry : ry * 0.4;
-        verts.push([cx + rx * (r / ry) * Math.cos(rot), cy + ry * (r / ry) * Math.sin(rot)]);
-        rot += step;
-      }
-      rc.polygon(verts, options);
-    } else if (stroke.tool === "heart") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
-      const sw = Math.abs(p1.x - p0.x), sh = Math.abs(p1.y - p0.y);
-      const topY = cy - sh / 2, bottomY = cy + sh / 2;
-      const leftX = cx - sw / 2, rightX = cx + sw / 2;
-      const pathD = `M ${cx} ${cy - sh / 4} C ${cx - sw / 4} ${topY}, ${leftX} ${cy - sh / 4}, ${leftX} ${cy + sh / 8} C ${leftX} ${cy + sh / 2}, ${cx - sw / 4} ${bottomY - sh / 8}, ${cx} ${bottomY} C ${cx + sw / 4} ${bottomY - sh / 8}, ${rightX} ${cy + sh / 2}, ${rightX} ${cy + sh / 8} C ${rightX} ${cy - sh / 4}, ${cx + sw / 4} ${topY}, ${cx} ${cy - sh / 4} Z`;
-      rc.path(pathD, options);
-    } else if (stroke.tool === "line") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      rc.line(p0.x, p0.y, p1.x, p1.y, options);
-    } else if (stroke.tool === "arrow") {
-      const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
-      rc.line(p0.x, p0.y, p1.x, p1.y, options);
-      const dx = p1.x - p0.x, dy = p1.y - p0.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ux = dx / len, uy = dy / len;
-      const headLen = Math.max(10, stroke.width * 3), angle = Math.PI / 6;
-      const xL = p1.x - headLen * (ux * Math.cos(angle) - uy * Math.sin(angle));
-      const yL = p1.y - headLen * (uy * Math.cos(angle) + ux * Math.sin(angle));
-      const xR = p1.x - headLen * (ux * Math.cos(angle) + uy * Math.sin(angle));
-      const yR = p1.y - headLen * (uy * Math.cos(angle) - ux * Math.sin(angle));
-      rc.line(p1.x, p1.y, xL, yL, options);
-      rc.line(p1.x, p1.y, xR, yR, options);
-    } else if (stroke.tool === "eraser") {
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.strokeStyle = "rgba(0,0,0,1)";
-      ctx.lineWidth = stroke.width;
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-      for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      // Freehand drawing tools — pen/pencil/marker use plain smooth canvas (no roughjs) to avoid shaking
-      if (stroke.points.length === 1) {
-        ctx.save();
-        ctx.fillStyle = stroke.color;
-        if (stroke.tool === "marker") ctx.globalAlpha = 0.22;
-        ctx.beginPath();
-        ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        if (stroke.tool === "pen" || stroke.tool === "pencil" || stroke.tool === "marker") {
-          ctx.save();
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.tool === "marker" ? stroke.width * 3.2 : stroke.width;
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          if (stroke.tool === "marker") ctx.globalAlpha = 0.22;
-          else if (stroke.tool === "pencil") ctx.globalAlpha = 0.85;
-          ctx.beginPath();
-          ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-          // Smooth bezier through points
-          for (let i = 1; i < stroke.points.length - 1; i++) {
-            const mx = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
-            const my = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
-            ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, mx, my);
-          }
-          const last = stroke.points[stroke.points.length - 1];
-          ctx.lineTo(last.x, last.y);
-          ctx.stroke();
-          ctx.restore();
-        } else {
-          ctx.save();
-          for (let i = 1; i < stroke.points.length; i++) {
-            renderSegment(ctx, stroke, stroke.points[i - 1], stroke.points[i], stroke.width);
-          }
-          ctx.restore();
-        }
-      }
-    }
-
-    // After drawing the stroke main content, we apply its masks
-    if (stroke.masks && stroke.masks.length > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.strokeStyle = "rgba(0,0,0,1)";
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-
-      stroke.masks.forEach((mask) => {
-        ctx.lineWidth = mask.width;
-        ctx.beginPath();
-        if (mask.points.length > 0) {
-          ctx.moveTo(mask.points[0].x, mask.points[0].y);
-          for (let i = 1; i < mask.points.length; i++) {
-            ctx.lineTo(mask.points[i].x, mask.points[i].y);
-          }
-          ctx.stroke();
-        }
-      });
-      ctx.restore();
-    }
-  }, []);
-
-  const redrawAll = useCallback((strokes: Stroke[]) => {
-    const ctx = ctxRef.current;
-    const canvas = canvasRef.current;
+  // ─── Redraw background grid ───────────────────────────────────────────────
+  const redrawGrid = useCallback(() => {
     const bgCtx = bgCtxRef.current;
     const bgCanvas = bgCanvasRef.current;
-    if (!ctx || !canvas || !bgCtx || !bgCanvas) return;
-
-    // 1. Draw/Redraw Background Grid Canvas
+    if (!bgCtx || !bgCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
     bgCtx.save();
     bgCtx.setTransform(1, 0, 0, 1, 0, 0);
     bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-
-    const dpr = window.devicePixelRatio || 1;
     bgCtx.scale(dpr * zoom, dpr * zoom);
     bgCtx.translate(panX, panY);
-
     drawInfiniteGrid(bgCtx, bgCanvas.width / (dpr * zoom), bgCanvas.height / (dpr * zoom), zoom, panX, panY);
     bgCtx.restore();
+  }, [zoom, panX, panY]);
 
-    // 2. Draw/Redraw Foreground Strokes Canvas
+  // ─── Redraw history canvas (completed strokes) ────────────────────────────
+  const redrawHistory = useCallback((strokes: Stroke[]) => {
+    const ctx = histCtxRef.current;
+    const canvas = histCanvasRef.current;
+    if (!ctx || !canvas) return;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    applyTransform(ctx);
+    strokes.forEach((s) => drawStrokeOnCtx(ctx, canvas, s));
+    ctx.restore();
+  }, [applyTransform]);
 
-    ctx.scale(dpr * zoom, dpr * zoom);
-    ctx.translate(panX, panY);
+  // ─── Redraw active canvas (in-progress strokes only) ─────────────────────
+  const redrawActive = useCallback(() => {
+    const ctx = activeCtxRef.current;
+    const canvas = activeCanvasRef.current;
+    if (!ctx || !canvas) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    applyTransform(ctx);
+    activeRef.current.forEach((stroke) => drawStrokeOnCtx(ctx, canvas, stroke));
+    ctx.restore();
+  }, [applyTransform]);
 
+  // ─── Full redraw (all layers) — called on zoom/pan/init/undo ─────────────
+  const redrawAll = useCallback((strokes: Stroke[]) => {
     historyRef.current = strokes;
-    strokes.forEach(drawStroke);
-    Array.from(activeRef.current.values()).forEach(drawStroke);
+    redrawGrid();
+    redrawHistory(strokes);
+    redrawActive();
 
-    // Selection bounding box
-    if (tool === "select" && selectedStrokeId) {
+    // Selection overlay on history canvas (harmless extra draw)
+    const ctx = histCtxRef.current;
+    const canvas = histCanvasRef.current;
+    if (ctx && canvas && tool === "select" && selectedStrokeId) {
       const selStroke = strokes.find((s) => s.strokeId === selectedStrokeId);
       if (selStroke) {
         const bounds = getStrokeBounds(selStroke);
         if (bounds) {
           ctx.save();
+          applyTransform(ctx);
           ctx.strokeStyle = "var(--accent)";
           ctx.lineWidth = 1.5 / zoom;
           ctx.setLineDash([5, 5]);
@@ -625,41 +721,43 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         }
       }
     }
-    ctx.restore();
-  }, [drawStroke, zoom, panX, panY, selectedStrokeId, tool]);
+  }, [redrawGrid, redrawHistory, redrawActive, applyTransform, tool, selectedStrokeId, zoom]);
 
+  // ─── Canvas resize ────────────────────────────────────────────────────────
   const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const bgCanvas = bgCanvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container || !bgCanvas) return;
-    const dpr = window.devicePixelRatio || 1;
+    if (!container) return;
+    const dpr  = window.devicePixelRatio || 1;
     const rect = container.getBoundingClientRect();
-    
-    // Resize drawing canvas
-    canvas.width  = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    canvas.style.width  = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    const ctx = canvas.getContext("2d");
-    if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctxRef.current = ctx; }
+    const w = Math.max(1, Math.floor(rect.width  * dpr));
+    const h = Math.max(1, Math.floor(rect.height * dpr));
+    const ws = `${rect.width}px`;
+    const hs = `${rect.height}px`;
 
-    // Resize background canvas
-    bgCanvas.width  = Math.max(1, Math.floor(rect.width * dpr));
-    bgCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    bgCanvas.style.width  = `${rect.width}px`;
-    bgCanvas.style.height = `${rect.height}px`;
-    const bgCtx = bgCanvas.getContext("2d");
-    if (bgCtx) { bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0); bgCtxRef.current = bgCtx; }
+    const resizeOne = (
+      canvasRef: React.RefObject<HTMLCanvasElement | null>,
+      ctxRef: React.MutableRefObject<CanvasRenderingContext2D | null>
+    ) => {
+      const c = canvasRef.current;
+      if (!c) return;
+      c.width  = w; c.height = h;
+      c.style.width  = ws; c.style.height = hs;
+      const ctx = c.getContext("2d");
+      if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctxRef.current = ctx; }
+    };
+
+    resizeOne(bgCanvasRef,     bgCtxRef);
+    resizeOne(histCanvasRef,   histCtxRef);
+    resizeOne(activeCanvasRef, activeCtxRef);
 
     redrawAll(historyRef.current);
   }, [redrawAll]);
 
   const deleteStrokeLocal = useCallback((strokeId: string) => {
     historyRef.current = historyRef.current.filter((s) => s.strokeId !== strokeId);
-    redrawAll(historyRef.current);
+    redrawHistory(historyRef.current);
     onStrokeDelete?.(strokeId);
-  }, [onStrokeDelete, redrawAll]);
+  }, [onStrokeDelete, redrawHistory]);
 
   // Delete key for selected stroke
   useEffect(() => {
@@ -680,13 +778,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     return () => obs.disconnect();
   }, [resizeCanvas]);
 
+  // On zoom/pan/select changes, redraw all layers
   useEffect(() => {
     redrawAll(historyRef.current);
   }, [zoom, panX, panY, selectedStrokeId, tool, redrawAll]);
 
   // Wheel-to-zoom (zoom centered on cursor position)
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = activeCanvasRef.current;
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -696,7 +795,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const r = canvas.getBoundingClientRect();
       const mouseX = e.clientX - r.left;
       const mouseY = e.clientY - r.top;
-      // Adjust pan so the point under the cursor stays fixed
       const newPanX = mouseX / newZoom - mouseX / zoom + panX;
       const newPanY = mouseY / newZoom - mouseY / zoom + panY;
       setPan(newPanX, newPanY);
@@ -707,46 +805,167 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, panX, panY, setZoom]);
 
+  // ─── Imperative API ───────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     redrawAll,
+
     applyRemoteStrokeStart: (stroke) => {
-      activeRef.current.set(stroke.strokeId, { ...stroke, points: [...stroke.points] });
-      redrawAll(historyRef.current);
-    },
-    applyRemoteStrokePoint: (strokeId, point) => {
-      const stroke = activeRef.current.get(strokeId);
-      if (stroke) { stroke.points.push(point); redrawAll(historyRef.current); }
-    },
-    applyRemoteStrokeEnd: (strokeId) => {
-      const stroke = activeRef.current.get(strokeId);
-      if (stroke) {
-        historyRef.current = [...historyRef.current, stroke];
-        activeRef.current.delete(strokeId);
-        redrawAll(historyRef.current);
+      // Add to active map and paint puff/initial point on active canvas
+      const s = { ...stroke, points: [...stroke.points] };
+      activeRef.current.set(s.strokeId, s);
+
+      // Eraser: no dot puff on start (destination-out on transparent active canvas = no-op)
+      if (s.tool === "eraser" || SHAPE_TOOLS.has(s.tool) || s.tool === "spray") return;
+
+      const ctx = activeCtxRef.current;
+      const canvas = activeCanvasRef.current;
+      if (!ctx || !canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+      if (s.points.length > 0) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr * z, dpr * z);
+        ctx.translate(px, py);
+        renderPuff(ctx, s, s.points[0], 0, s.width);
+        ctx.restore();
       }
     },
+
+    applyRemoteStrokePoint: (strokeId, point) => {
+      const stroke = activeRef.current.get(strokeId);
+      if (!stroke) return;
+
+      const prev = stroke.points[stroke.points.length - 1];
+      stroke.points.push(point);
+
+      const dpr = window.devicePixelRatio || 1;
+      const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+
+      if (stroke.tool === "eraser") {
+        // Eraser paints directly on history canvas (active canvas is transparent — no-op there)
+        const histCtx = histCtxRef.current;
+        if (histCtx && prev) {
+          paintEraserSegmentOnHistory(histCtx, prev, point, stroke.width, z, px, py, dpr);
+        }
+        return;
+      }
+
+      const ctx = activeCtxRef.current;
+      const canvas = activeCanvasRef.current;
+      if (!ctx || !canvas) return;
+
+      if (SHAPE_TOOLS.has(stroke.tool)) {
+        // For shapes, only update the last point then repaint active canvas
+        // (active canvas only has in-progress strokes — cheap)
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(dpr * z, dpr * z);
+        ctx.translate(px, py);
+        activeRef.current.forEach((s) => drawStrokeOnCtx(ctx, canvas, s));
+        ctx.restore();
+      } else if (prev) {
+        // Freehand: paint only the new segment — zero history touched
+        paintIncrementalSegment(ctx, stroke, prev, point, z, px, py, dpr);
+      }
+    },
+
+    applyRemoteStrokeEnd: (strokeId) => {
+      const stroke = activeRef.current.get(strokeId);
+      if (!stroke) return;
+
+      activeRef.current.delete(strokeId);
+
+      if (stroke.tool === "eraser") {
+        // Apply mask logic to history strokes (same as local eraser end)
+        historyRef.current.forEach((existingStroke) => {
+          const intersects = stroke.points.some((p) => hitTestWithEraser(existingStroke, p.x, p.y, stroke.width));
+          if (intersects) {
+            if (!existingStroke.masks) existingStroke.masks = [];
+            existingStroke.masks.push({
+              width: stroke.width,
+              points: stroke.points.map((p) => ({ x: p.x, y: p.y })),
+            });
+          }
+        });
+        // Redraw history cleanly with masks applied (erases the live preview dirt)
+        redrawHistory(historyRef.current);
+        return;
+      }
+
+      // Non-eraser: move stroke from active → history
+      historyRef.current = [...historyRef.current, stroke];
+
+      // 2. Composite stroke onto history canvas (no full clear)
+      const histCtx = histCtxRef.current;
+      const histCanvas = histCanvasRef.current;
+      if (histCtx && histCanvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+        histCtx.save();
+        histCtx.setTransform(1, 0, 0, 1, 0, 0);
+        histCtx.scale(dpr * z, dpr * z);
+        histCtx.translate(px, py);
+        drawStrokeOnCtx(histCtx, histCanvas, stroke);
+        histCtx.restore();
+      }
+
+      // 3. Repaint active canvas without this stroke (typically just remaining active strokes)
+      const activeCtx = activeCtxRef.current;
+      const activeCanvas = activeCanvasRef.current;
+      if (activeCtx && activeCanvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+        activeCtx.save();
+        activeCtx.setTransform(1, 0, 0, 1, 0, 0);
+        activeCtx.clearRect(0, 0, activeCanvas.width, activeCanvas.height);
+        activeCtx.scale(dpr * z, dpr * z);
+        activeCtx.translate(px, py);
+        activeRef.current.forEach((s) => drawStrokeOnCtx(activeCtx, activeCanvas, s));
+        activeCtx.restore();
+      }
+    },
+
     removeStroke: (strokeId) => {
       historyRef.current = historyRef.current.filter((s) => s.strokeId !== strokeId);
-      redrawAll(historyRef.current);
+      redrawHistory(historyRef.current);
     },
+
     addStroke: (stroke) => {
       historyRef.current = [...historyRef.current, stroke];
-      redrawAll(historyRef.current);
+      // Composite onto history canvas directly
+      const ctx = histCtxRef.current;
+      const canvas = histCanvasRef.current;
+      if (ctx && canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr * z, dpr * z);
+        ctx.translate(px, py);
+        drawStrokeOnCtx(ctx, canvas, stroke);
+        ctx.restore();
+      }
     },
+
     clearCanvas: () => {
       historyRef.current = [];
       activeRef.current.clear();
-      redrawAll([]);
+      histCtxRef.current?.clearRect(0, 0, histCanvasRef.current?.width ?? 0, histCanvasRef.current?.height ?? 0);
+      activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
     },
+
     updateStroke: (strokeId, updates) => {
       const idx = historyRef.current.findIndex((s) => s.strokeId === strokeId);
       if (idx !== -1) {
         historyRef.current[idx] = { ...historyRef.current[idx], ...updates };
-        redrawAll(historyRef.current);
+        redrawHistory(historyRef.current);
       }
     },
+
     getStroke: (strokeId) => historyRef.current.find((s) => s.strokeId === strokeId),
-  }), [redrawAll]);
+  }), [redrawAll, redrawHistory]);
 
   // Spray interval
   const startSprayInterval = useCallback((strokeId: string) => {
@@ -756,11 +975,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       if (!pos || !pointerActiveRef.current) return;
       const stroke = activeRef.current.get(strokeId);
       if (!stroke) return;
+      const pointIdx = stroke.points.length;
       stroke.points.push(pos);
-      redrawAll(historyRef.current);
+
+      // Paint puff directly on active canvas
+      const ctx = activeCtxRef.current;
+      const canvas = activeCanvasRef.current;
+      if (ctx && canvas) {
+        const dpr = window.devicePixelRatio || 1;
+        const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr * z, dpr * z);
+        ctx.translate(px, py);
+        renderPuff(ctx, stroke, pos, pointIdx, stroke.width);
+        ctx.restore();
+      }
       onStrokePoint(strokeId, pos);
     }, 40);
-  }, [onStrokePoint, redrawAll]);
+  }, [onStrokePoint]);
 
   const stopSprayInterval = () => {
     if (sprayIntervalRef.current) { clearInterval(sprayIntervalRef.current); sprayIntervalRef.current = null; }
@@ -772,7 +1005,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const point = toVirtual(e.clientX, e.clientY);
     lastPointerPosRef.current = point;
 
-    // Hand tool or space-pan or middle-click
     if (tool === "hand" || spacePressed || e.button === 1) {
       isPanningRef.current = true;
       panStartRef.current = { x: e.clientX, y: e.clientY };
@@ -781,7 +1013,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    // Select tool
     if (tool === "select") {
       const hitIdx = [...historyRef.current].reverse().findIndex((s) => hitTest(s, point.x, point.y));
       if (hitIdx !== -1) {
@@ -798,11 +1029,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       } else {
         setSelectedStrokeId(null);
       }
-      redrawAll(historyRef.current);
+      redrawHistory(historyRef.current);
       return;
     }
 
-    // Drawing
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     pointerActiveRef.current = true;
     const strokeId = crypto.randomUUID();
@@ -817,11 +1047,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (SHAPE_TOOLS.has(tool)) {
       shapeStartRef.current = point;
     } else {
-      const ctx = ctxRef.current;
-      if (ctx) {
+      // Paint initial puff on active canvas
+      const ctx = activeCtxRef.current;
+      const canvas = activeCanvasRef.current;
+      if (ctx && canvas) {
+        const dpr = window.devicePixelRatio || 1;
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        const dpr = window.devicePixelRatio || 1;
         ctx.scale(dpr * zoom, dpr * zoom);
         ctx.translate(panX, panY);
         renderPuff(ctx, stroke, point, 0, width);
@@ -837,21 +1069,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const point = toVirtual(e.clientX, e.clientY);
     lastPointerPosRef.current = point;
 
-    // Update local cursor circle position (screen coords)
-    const canvas = canvasRef.current;
+    const canvas = activeCanvasRef.current;
     if (canvas) {
       const r = canvas.getBoundingClientRect();
       setCursorPos({ x: e.clientX - r.left, y: e.clientY - r.top });
     }
 
-    // Throttled cursor broadcast
+    // Throttled cursor broadcast — 80ms (was 50ms)
     const now = performance.now();
-    if (now - lastCursorSentRef.current >= 50) {
+    if (now - lastCursorSentRef.current >= 80) {
       lastCursorSentRef.current = now;
       onCursorMove(point, { brushWidth: width, tool });
     }
 
-    // Panning
     if (isPanningRef.current) {
       const dx = e.clientX - panStartRef.current.x;
       const dy = e.clientY - panStartRef.current.y;
@@ -859,7 +1089,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    // Drag selected shape
     if (isDraggingRef.current && selectedStrokeId) {
       const clicked = historyRef.current.find((s) => s.strokeId === selectedStrokeId);
       if (clicked) {
@@ -872,7 +1101,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             points: mask.points.map((mp) => ({ x: mp.x + dx, y: mp.y + dy })),
           }));
         }
-        redrawAll(historyRef.current);
+        redrawHistory(historyRef.current);
       }
       return;
     }
@@ -884,48 +1113,51 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (!stroke) return;
 
     if (SHAPE_TOOLS.has(tool)) {
+      // For local shape preview: update last point and repaint only active canvas
       stroke.points = [stroke.points[0], point];
-      redrawAll(historyRef.current);
+
+      const ctx = activeCtxRef.current;
+      const actCanvas = activeCanvasRef.current;
+      if (ctx && actCanvas) {
+        const dpr = window.devicePixelRatio || 1;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, actCanvas.width, actCanvas.height);
+        ctx.scale(dpr * zoom, dpr * zoom);
+        ctx.translate(panX, panY);
+        activeRef.current.forEach((s) => drawStrokeOnCtx(ctx, actCanvas, s));
+        ctx.restore();
+      }
       onStrokePoint(strokeId, point);
       return;
     }
 
     if (tool === "spray") return;
 
+    // Min-move threshold: 3px (was 1.5px) — halves point volume
     const prev = stroke.points[stroke.points.length - 1];
     if (prev) {
       const ddx = point.x - prev.x;
       const ddy = point.y - prev.y;
-      if (ddx * ddx + ddy * ddy < 1.5) return;
+      if (ddx * ddx + ddy * ddy < 9) return;   // 3² = 9
     }
 
-    const ctx = ctxRef.current;
-    if (ctx) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const dpr = window.devicePixelRatio || 1;
-      ctx.scale(dpr * zoom, dpr * zoom);
-      ctx.translate(panX, panY);
-      if (prev) {
-        if (tool === "pen" || tool === "pencil" || tool === "marker" || tool === "eraser") {
-          if (tool === "eraser") {
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.strokeStyle = "rgba(0,0,0,1)";
-            ctx.lineWidth = stroke.width;
-          } else {
-            ctx.globalCompositeOperation = "source-over";
-            ctx.strokeStyle = stroke.color;
-            ctx.lineWidth = tool === "marker" ? stroke.width * 3.2 : stroke.width;
-            if (tool === "marker") ctx.globalAlpha = 0.22;
-            else if (tool === "pencil") ctx.globalAlpha = 0.85;
-          }
-          ctx.lineCap = "round"; ctx.lineJoin = "round";
-          ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(point.x, point.y); ctx.stroke();
-        } else {
-          renderSegment(ctx, stroke, prev, point, stroke.width);
-        }
+    if (tool === "eraser") {
+      // Eraser: paint directly on history canvas for real-time visual feedback.
+      // The active canvas is transparent — destination-out there would be a no-op.
+      const histCtx = histCtxRef.current;
+      if (histCtx && prev) {
+        paintEraserSegmentOnHistory(histCtx, prev, point, stroke.width, zoom, panX, panY, window.devicePixelRatio || 1);
       }
-      ctx.restore();
+      stroke.points.push(point);
+      onStrokePoint(strokeId, point);
+      return;
+    }
+
+    // All other freehand tools: incremental segment on active canvas only
+    const ctx = activeCtxRef.current;
+    if (ctx && prev) {
+      paintIncrementalSegment(ctx, stroke, prev, point, zoom, panX, panY, window.devicePixelRatio || 1);
     }
     stroke.points.push(point);
     onStrokePoint(strokeId, point);
@@ -940,7 +1172,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       if (clicked) {
         deleteStrokeLocal(selectedStrokeId);
         historyRef.current = [...historyRef.current, clicked];
-        redrawAll(historyRef.current);
+        redrawHistory(historyRef.current);
         onStrokeUpdate?.(clicked);
       }
       return;
@@ -956,7 +1188,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const stroke = activeRef.current.get(strokeId);
     if (stroke) {
       activeRef.current.delete(strokeId);
-      
+
       if (stroke.tool === "eraser") {
         historyRef.current.forEach((existingStroke) => {
           const intersects = stroke.points.some((p) => hitTestWithEraser(existingStroke, p.x, p.y, stroke.width));
@@ -970,18 +1202,34 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             onStrokeUpdate?.(existingStroke);
           }
         });
-        redrawAll(historyRef.current);
+        // Clear active canvas, then full history redraw (eraser changes history)
+        activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
+        redrawHistory(historyRef.current);
       } else {
+        // Composite local completed stroke onto history canvas
         historyRef.current = [...historyRef.current, stroke];
+        const histCtx = histCtxRef.current;
+        const histCanvas = histCanvasRef.current;
+        if (histCtx && histCanvas) {
+          const dpr = window.devicePixelRatio || 1;
+          histCtx.save();
+          histCtx.setTransform(1, 0, 0, 1, 0, 0);
+          histCtx.scale(dpr * zoom, dpr * zoom);
+          histCtx.translate(panX, panY);
+          drawStrokeOnCtx(histCtx, histCanvas, stroke);
+          histCtx.restore();
+        }
+        // Clear the active canvas (stroke is now on history)
+        activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
+
         onStrokeEnd(strokeId, stroke);
       }
     }
   };
 
-  // Cursor appearance — size in screen pixels = brush width (virtual) * zoom
   const cursorDiam = Math.max(4, width * zoom);
-  const isEraser = tool === "eraser";
-  const isShape = SHAPE_TOOLS.has(tool);
+  const isEraser   = tool === "eraser";
+  const isShape    = SHAPE_TOOLS.has(tool);
   const isPanningCursor = tool === "hand" || spacePressed;
 
   return (
@@ -992,14 +1240,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }`}
       onMouseLeave={() => setCursorPos(null)}
     >
-      {/* Background dot grid canvas */}
+      {/* Layer 0: Background dot grid */}
       <canvas
         ref={bgCanvasRef}
         className="absolute inset-0 h-full w-full pointer-events-none bg-paper"
       />
-      {/* Drawing canvas */}
+      {/* Layer 1: Completed stroke history */}
       <canvas
-        ref={canvasRef}
+        ref={histCanvasRef}
+        className="absolute inset-0 h-full w-full pointer-events-none bg-transparent"
+      />
+      {/* Layer 2: Active (in-progress) strokes — also receives pointer events */}
+      <canvas
+        ref={activeCanvasRef}
         className="absolute inset-0 h-full w-full touch-none bg-transparent"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1008,7 +1261,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         onPointerCancel={endStroke}
       />
 
-      {/* Local circle cursor — no CSS transition so it tracks the pointer exactly */}
+      {/* Local circle cursor */}
       {cursorPos && !isPanningCursor && tool !== "select" && (
         <div
           className="pointer-events-none absolute rounded-full"
