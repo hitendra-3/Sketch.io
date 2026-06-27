@@ -22,12 +22,12 @@ export default function PresenceBar({
 }: PresenceBarProps) {
   const [copied, setCopied] = useState(false);
   const [showUserList, setShowUserList] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setShowUserList(false);
       }
     }
@@ -70,7 +70,7 @@ export default function PresenceBar({
         {copied && <span className="hidden text-xs text-emerald-600 sm:block">Copied!</span>}
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4 relative">
+      <div ref={containerRef} className="flex items-center gap-3 sm:gap-4 relative">
         <span className="flex items-center gap-1.5 font-mono text-[11px] text-ink-soft">
           <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
           {statusLabel}
@@ -108,7 +108,6 @@ export default function PresenceBar({
         {/* Users Dropdown */}
         {showUserList && (
           <div
-            ref={dropdownRef}
             className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-line bg-surface p-3 shadow-md animate-fade-in"
           >
             <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft mb-2 px-1 text-left">
