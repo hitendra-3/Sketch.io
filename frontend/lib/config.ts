@@ -4,7 +4,7 @@
 import type { RoomRole } from "./types";
 
 export const WS_BASE_URL =
-  process.env.NEXT_PUBLIC_WS_URL?.replace(/\/$/, "") || "ws://127.0.0.1:7860";
+  (import.meta.env.VITE_WS_URL || import.meta.env.NEXT_PUBLIC_WS_URL || "").replace(/\/$/, "") || "ws://127.0.0.1:7860";
 
 export function wsUrlForRoom(roomId: string, name: string, role: RoomRole = "editor"): string {  const encodedName = encodeURIComponent(name);
   const roleParam = role === "viewer" ? "&role=viewer" : "";

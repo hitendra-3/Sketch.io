@@ -1,22 +1,22 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
 import { randomRoomId } from "@/lib/config";
 
 export default function Home() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [joinCode, setJoinCode] = useState("");
 
   const handleCreate = () => {
-    router.push(`/board/${randomRoomId()}`);
+    navigate(`/board/${randomRoomId()}`);
   };
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     const code = joinCode.trim().toLowerCase().replace(/\s+/g, "");
-    if (code) router.push(`/board/${encodeURIComponent(code)}`);
+    if (code) navigate(`/board/${encodeURIComponent(code)}`);
   };
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "react-router-dom";
 import Canvas, { type CanvasHandle } from "@/components/Canvas";
 import Toolbar from "@/components/Toolbar";
 import PresenceBar from "@/components/PresenceBar";
@@ -25,8 +25,8 @@ const SWATCHES = [
 ];
 
 export default function BoardPage() {
-  const { roomId } = useParams<{ roomId: string }>();
-  const searchParams = useSearchParams();
+  const { roomId } = useParams() as { roomId: string };
+  const [searchParams] = useSearchParams();
   const roleFromUrl: RoomRole = searchParams.get("role") === "viewer" ? "viewer" : "editor";
   const isViewer = roleFromUrl === "viewer";
 

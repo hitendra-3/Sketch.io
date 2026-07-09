@@ -1,6 +1,6 @@
 # Sketch.io — Real-time Collaborative Whiteboard
 
-A multiplayer drawing canvas where every stroke syncs instantly over WebSockets. Built from scratch with Next.js, FastAPI, and HTML5 Canvas (no external canvas libraries).
+A multiplayer drawing canvas where every stroke syncs instantly over WebSockets. Built from scratch with React (Vite), Node.js (Express + ws), and HTML5 Canvas (no external canvas libraries).
 
 ---
 
@@ -8,14 +8,14 @@ A multiplayer drawing canvas where every stroke syncs instantly over WebSockets.
 
 ```mermaid
 graph TD
-    subgraph Frontend [Next.js Client]
+    subgraph Frontend [React Vite Client]
         Canvas[HTML5 Canvas]
         Presence[PresenceBar & CursorLayer]
         State[Local UI State]
     end
 
-    subgraph Backend [FastAPI WebSocket Server]
-        WS[WebSocket Endpoint /ws/:roomId]
+    subgraph Backend [Node.js Express Server]
+        WS[WebSocket Server /ws/:roomId]
         Mem[In-Memory Room State]
     end
 
@@ -46,9 +46,12 @@ graph TD
    npm run dev
    ```
 
+- Frontend App will run on: [http://localhost:5173](http://localhost:5173)
+- Backend API will run on: [http://localhost:7860](http://localhost:7860)
+
 ---
 
 ## ☁️ Deployment
 
-- **Backend:** Deploy to [Railway](https://railway.com) using the included `Dockerfile` and generate a domain.
-- **Frontend:** Deploy to [Vercel](https://vercel.com) with the env variable `NEXT_PUBLIC_WS_URL=wss://your-backend.up.railway.app`.
+- **Backend:** Deploy to [Railway](https://railway.com) or any Node host running `node backend/server.js`.
+- **Frontend:** Deploy to [Vercel](https://vercel.com) or static hosts with the environment variable `VITE_WS_URL=wss://your-backend.up.railway.app`.
