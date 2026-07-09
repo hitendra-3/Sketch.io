@@ -1,18 +1,5 @@
-"use client";
-
 import { useState, useRef, useEffect } from "react";
 import { shareUrlForRoom } from "@/lib/config";
-import type { RemoteUser } from "@/lib/types";
-
-interface PresenceBarProps {
-  roomId: string;
-  users: RemoteUser[];
-  selfName: string;
-  selfColor: string;
-  userCount: number;
-  connectionStatus: "connecting" | "open" | "closed";
-  isViewer?: boolean;
-}
 
 export default function PresenceBar({
   roomId,
@@ -22,20 +9,19 @@ export default function PresenceBar({
   userCount,
   connectionStatus,
   isViewer = false,
-}: PresenceBarProps) {
-  const [copied, setCopied] = useState<"editor" | "viewer" | null>(null);
+}) {
+  const [copied, setCopied] = useState(null);
   const [showUserList, setShowUserList] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const shareRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef(null);
+  const shareRef = useRef(null);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
         setShowUserList(false);
       }
-      if (shareRef.current && !shareRef.current.contains(event.target as Node)) {
+      if (shareRef.current && !shareRef.current.contains(event.target)) {
         setShowShareMenu(false);
       }
     }
@@ -43,7 +29,7 @@ export default function PresenceBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleCopy = async (role: "editor" | "viewer") => {
+  const handleCopy = async (role) => {
     try {
       await navigator.clipboard.writeText(shareUrlForRoom(roomId, role));
       setCopied(role);
@@ -93,7 +79,6 @@ export default function PresenceBar({
           {statusLabel}
         </span>
 
-        {/* Clickable Avatars / User List Toggle */}
         <button
           onClick={() => setShowUserList(!showUserList)}
           className="flex items-center gap-2 hover:opacity-85 focus:outline-none"
@@ -122,11 +107,8 @@ export default function PresenceBar({
           </span>
         </button>
 
-        {/* Users Dropdown */}
         {showUserList && (
-          <div
-            className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-line bg-surface p-3 shadow-md animate-fade-in"
-          >
+          <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-line bg-surface p-3 shadow-md animate-fade-in">
             <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft mb-2 px-1 text-left">
               Active in Room
             </p>
@@ -156,45 +138,44 @@ export default function PresenceBar({
           </div>
         )}
 
-        {/* Share menu — editors only */}
         {!isViewer && (
-        <div ref={shareRef} className="relative">
-          <button
-            onClick={() => setShowShareMenu(!showShareMenu)}
-            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:hidden"
-          >
-            {copied ? "Copied!" : "Share"}
-          </button>
-          <button
-            onClick={() => setShowShareMenu(!showShareMenu)}
-            className="hidden items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:flex"
-          >
-            {shareButtonLabel}
-            <ChevronDownIcon className={`h-3 w-3 transition-transform duration-150 ${showShareMenu ? "rotate-180" : ""}`} />
-          </button>
+          <div ref={shareRef} className="relative">
+            <button
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:hidden"
+            >
+              {copied ? "Copied!" : "Share"}
+            </button>
+            <button
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              className="hidden items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 sm:flex"
+            >
+              {shareButtonLabel}
+              <ChevronDownIcon className={`h-3 w-3 transition-transform duration-150 ${showShareMenu ? "rotate-180" : ""}`} />
+            </button>
 
-          {showShareMenu && (
-            <div className="absolute right-0 top-10 z-50 w-64 rounded-xl border border-line bg-surface p-2 shadow-md animate-fade-in">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft mb-2 px-2 pt-1 text-left">
-                Share as
-              </p>
-              <button
-                onClick={() => handleCopy("editor")}
-                className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
-              >
-                <span className="text-xs font-semibold text-ink">Editor</span>
-                <span className="text-[10px] text-ink-soft">Can draw and edit the board</span>
-              </button>
-              <button
-                onClick={() => handleCopy("viewer")}
-                className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
-              >
-                <span className="text-xs font-semibold text-ink">Viewer</span>
-                <span className="text-[10px] text-ink-soft">Can only view — no drawing</span>
-              </button>
-            </div>
-          )}
-        </div>
+            {showShareMenu && (
+              <div className="absolute right-0 top-10 z-50 w-64 rounded-xl border border-line bg-surface p-2 shadow-md animate-fade-in">
+                <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft mb-2 px-2 pt-1 text-left">
+                  Share as
+                </p>
+                <button
+                  onClick={() => handleCopy("editor")}
+                  className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
+                >
+                  <span className="text-xs font-semibold text-ink">Editor</span>
+                  <span className="text-[10px] text-ink-soft">Can draw and edit the board</span>
+                </button>
+                <button
+                  onClick={() => handleCopy("viewer")}
+                  className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent-soft/40"
+                >
+                  <span className="text-xs font-semibold text-ink">Viewer</span>
+                  <span className="text-[10px] text-ink-soft">Can only view — no drawing</span>
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -210,7 +191,7 @@ function CopyIcon() {
   );
 }
 
-function ChevronDownIcon({ className }: { className?: string }) {
+function ChevronDownIcon({ className }) {
   return (
     <svg
       width="12"

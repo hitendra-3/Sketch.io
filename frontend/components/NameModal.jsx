@@ -1,18 +1,9 @@
-"use client";
-
 import { useState } from "react";
 
-interface NameModalProps {
-  roomId: string;
-  defaultName: string;
-  isViewer?: boolean;
-  onJoin: (name: string) => void;
-}
-
-export default function NameModal({ roomId, defaultName, isViewer = false, onJoin }: NameModalProps) {
+export default function NameModal({ roomId, defaultName, isViewer = false, onJoin }) {
   const [name, setName] = useState(defaultName);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     onJoin(name.trim() || defaultName);
   };
@@ -25,7 +16,6 @@ export default function NameModal({ roomId, defaultName, isViewer = false, onJoi
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-md animate-pop-in flex flex-col items-center text-center"
       >
-        {/* Decorative Circle Avatar */}
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent text-2xl font-bold mb-4 shadow-sm border border-accent/10">
           {initial}
         </div>

@@ -1,8 +1,6 @@
-"use client";
-
 import { useEffect, useState } from "react";
 
-export default function ThemeToggle({ className = "" }: { className?: string }) {
+export default function ThemeToggle({ className = "" }) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -16,8 +14,7 @@ export default function ThemeToggle({ className = "" }: { className?: string }) 
     try {
       localStorage.setItem("sketchio-theme", next ? "dark" : "light");
     } catch {
-      // localStorage can be unavailable (private mode / SSR edge cases);
-      // the toggle still works for the current session either way.
+      // localStorage can be unavailable in private mode; the toggle still works.
     }
   };
 

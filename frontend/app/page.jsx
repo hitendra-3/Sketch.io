@@ -1,5 +1,3 @@
-"use client";
-
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -13,7 +11,7 @@ export default function Home() {
     navigate(`/board/${randomRoomId()}`);
   };
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = (e) => {
     e.preventDefault();
     const code = joinCode.trim().toLowerCase().replace(/\s+/g, "");
     if (code) navigate(`/board/${encodeURIComponent(code)}`);
@@ -87,7 +85,7 @@ export default function Home() {
         </section>
 
         <footer className="flex flex-col items-center gap-1 pb-8 text-center font-mono text-[11px] text-ink-soft">
-          <span>FastAPI WebSockets · Next.js · HTML5 Canvas · Built from scratch</span>
+          <span>Node.js WebSockets · React · HTML5 Canvas · Built from scratch</span>
           <span className="opacity-60">Rooms are ephemeral — history lives as long as the server does.</span>
         </footer>
       </div>
@@ -95,10 +93,6 @@ export default function Home() {
   );
 }
 
-// Signature element: a few colored strokes that draw themselves in a loop
-// on a small grid, like cursors actively sketching — a quiet nod to what
-// the product actually does, rendered as plain inline SVG (no canvas, no
-// animation libs).
 function LiveStrokePreview() {
   const paths = [
     { d: "M10,70 C 40,20 80,110 120,40 S 190,10 220,60", color: "#2454FF", dur: "2.4s", delay: "0s" },

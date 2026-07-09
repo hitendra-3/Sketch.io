@@ -1,15 +1,13 @@
-"use client";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import rough from "roughjs";
-import type { Point, Stroke, StrokeMask, Tool } from "@/lib/types";
 
 // ─── Seeded PRNG (xorshift32) ─────────────────────────────────────────────────
-function hashStr(s: string): number {
+function hashStr(s) {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 0x01000193); }
   return h >>> 0;
 }
-function mkRand(seed: number) {
+function mkRand(seed) {
   let s = (seed | 1) >>> 0;
   return () => {
     s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
@@ -18,7 +16,7 @@ function mkRand(seed: number) {
 }
 
 // ─── Selection helpers ────────────────────────────────────────────────────────
-function distToSegment(x: number, y: number, x1: number, y1: number, x2: number, y2: number) {
+function distToSegment(x, y, x1, y1, x2, y2) {
   const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
   if (l2 === 0) return Math.sqrt((x - x1) ** 2 + (y - y1) ** 2);
   let t = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / l2;
@@ -26,19 +24,12 @@ function distToSegment(x: number, y: number, x1: number, y1: number, x2: number,
   return Math.sqrt((x - (x1 + t * (x2 - x1))) ** 2 + (y - (y1 + t * (y2 - y1))) ** 2);
 }
 
-function hitTest(stroke: Stroke, x: number, y: number): boolean {
+function hitTest(stroke, x, y) {
   if (stroke.tool === "eraser") return false;
   if (stroke.points.length === 0) return false;
   const points = stroke.points;
 
-  if (
-    stroke.tool === "rect" ||
-    stroke.tool === "diamond" ||
-    stroke.tool === "triangle" ||
-    stroke.tool === "star" ||
-    stroke.tool === "hexagon" ||
-    stroke.tool === "heart"
-  ) {
+  if (["rect","diamond","triangle","star","hexagon","heart"].includes(stroke.tool)) {
     const p0 = points[0];
     const p1 = points[points.length - 1];
     const minX = Math.min(p0.x, p1.x);
@@ -75,20 +66,13 @@ function hitTest(stroke: Stroke, x: number, y: number): boolean {
   return false;
 }
 
-function hitTestWithEraser(stroke: Stroke, x: number, y: number, eraserWidth: number): boolean {
+function hitTestWithEraser(stroke, x, y, eraserWidth) {
   if (stroke.tool === "eraser") return false;
   if (stroke.points.length === 0) return false;
   const points = stroke.points;
   const threshold = Math.max(12, (stroke.width + eraserWidth) / 2 + 4);
 
-  if (
-    stroke.tool === "rect" ||
-    stroke.tool === "diamond" ||
-    stroke.tool === "triangle" ||
-    stroke.tool === "star" ||
-    stroke.tool === "hexagon" ||
-    stroke.tool === "heart"
-  ) {
+  if (["rect","diamond","triangle","star","hexagon","heart"].includes(stroke.tool)) {
     const p0 = points[0];
     const p1 = points[points.length - 1];
     const minX = Math.min(p0.x, p1.x);
@@ -130,7 +114,7 @@ function hitTestWithEraser(stroke: Stroke, x: number, y: number, eraserWidth: nu
   return false;
 }
 
-function getStrokeBounds(stroke: Stroke) {
+function getStrokeBounds(stroke) {
   if (stroke.points.length === 0) return null;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   stroke.points.forEach((p) => {
@@ -146,11 +130,7 @@ function getStrokeBounds(stroke: Stroke) {
 const SHAPE_TOOLS = new Set(["rect", "circle", "triangle", "line", "arrow", "diamond", "star", "hexagon", "heart"]);
 
 // ─── Infinite dot grid ───────────────────────────────────────────────────────
-function drawInfiniteGrid(
-  ctx: CanvasRenderingContext2D,
-  width: number, height: number,
-  zoom: number, panX: number, panY: number
-) {
+function drawInfiniteGrid(ctx, width, height, zoom, panX, panY) {
   ctx.save();
   const gridSize = 32;
   const startX = -panX - 100;
@@ -173,12 +153,7 @@ function drawInfiniteGrid(
 }
 
 // ─── Segment rendering ────────────────────────────────────────────────────────
-function renderSegment(
-  ctx: CanvasRenderingContext2D,
-  stroke: Stroke,
-  from: Point, to: Point,
-  pw: number
-) {
+function renderSegment(ctx, stroke, from, to, pw) {
   const fx = from.x, fy = from.y;
   const tx = to.x, ty = to.y;
   ctx.save();
@@ -257,10 +232,7 @@ function renderSegment(
   ctx.restore();
 }
 
-function renderPuff(
-  ctx: CanvasRenderingContext2D,
-  stroke: Stroke, point: Point, pointIdx: number, pw: number
-) {
+function renderPuff(ctx, stroke, point, pointIdx, pw) {
   const px = point.x, py = point.y;
   ctx.save();
 
@@ -297,13 +269,13 @@ function renderPuff(
 }
 
 // ─── Draw a single complete stroke onto a given context ───────────────────────
-function getSeed(id: string): number {
+function getSeed(id) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = Math.imul(31, h) + id.charCodeAt(i) | 0;
   return Math.abs(h) || 1;
 }
 
-function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stroke: Stroke) {
+function drawStrokeOnCtx(ctx, canvas, stroke) {
   const rc = rough.canvas(canvas);
 
   const options = {
@@ -342,7 +314,7 @@ function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
     const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
     const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
     const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
-    const verts: [number, number][] = [];
+    const verts = [];
     for (let i = 0; i < 6; i++) {
       const angle = (i * Math.PI) / 3 - Math.PI / 2;
       verts.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
@@ -352,7 +324,7 @@ function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
     const p0 = stroke.points[0], p1 = stroke.points[stroke.points.length - 1];
     const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2;
     const rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2;
-    const verts: [number, number][] = [];
+    const verts = [];
     const spikes = 5, step = Math.PI / spikes;
     let rot = (Math.PI / 2) * 3;
     for (let i = 0; i < spikes * 2; i++) {
@@ -397,7 +369,6 @@ function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
     ctx.stroke();
     ctx.restore();
   } else {
-    // Freehand drawing tools
     if (stroke.points.length === 1) {
       ctx.save();
       ctx.fillStyle = stroke.color;
@@ -459,16 +430,7 @@ function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
 }
 
 // ─── Paint a single incremental freehand segment onto a context ───────────────
-// For shapes, spray, and eraser the caller handles rendering; those return false.
-function paintIncrementalSegment(
-  ctx: CanvasRenderingContext2D,
-  stroke: Stroke,
-  prev: Point,
-  curr: Point,
-  zoom: number, panX: number, panY: number,
-  dpr: number
-): boolean {
-  // These tools need special handling by the caller
+function paintIncrementalSegment(ctx, stroke, prev, curr, zoom, panX, panY, dpr) {
   if (SHAPE_TOOLS.has(stroke.tool) || stroke.tool === "spray" || stroke.tool === "eraser") return false;
 
   ctx.save();
@@ -493,13 +455,7 @@ function paintIncrementalSegment(
 }
 
 // ─── Paint an eraser segment directly onto the history canvas ─────────────────
-function paintEraserSegmentOnHistory(
-  histCtx: CanvasRenderingContext2D,
-  prev: Point, curr: Point,
-  width: number,
-  zoom: number, panX: number, panY: number,
-  dpr: number
-) {
+function paintEraserSegmentOnHistory(histCtx, prev, curr, width, zoom, panX, panY, dpr) {
   histCtx.save();
   histCtx.setTransform(1, 0, 0, 1, 0, 0);
   histCtx.scale(dpr * zoom, dpr * zoom);
@@ -512,48 +468,8 @@ function paintEraserSegmentOnHistory(
   histCtx.restore();
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-export interface CanvasHandle {
-  redrawAll: (strokes: Stroke[]) => void;
-  applyRemoteStrokeStart: (stroke: Stroke) => void;
-  applyRemoteStrokePoint: (strokeId: string, point: Point) => void;
-  applyRemoteStrokeEnd: (strokeId: string) => void;
-  removeStroke: (strokeId: string) => void;
-  addStroke: (stroke: Stroke) => void;
-  clearCanvas: () => void;
-  updateStroke: (strokeId: string, updates: Partial<Stroke>) => void;
-  getStroke: (strokeId: string) => Stroke | undefined;
-}
-
-interface CanvasProps {
-  tool: Tool;
-  color: string;
-  width: number;
-  fillStyle: "hachure" | "cross-hatch" | "solid" | "none";
-  fillColor: string;
-  roughness: number;
-
-  zoom: number;
-  panX: number;
-  panY: number;
-  setPan: (x: number, y: number) => void;
-  setZoom?: (z: number) => void;
-
-  onStrokeStart: (s: {
-    strokeId: string; color: string; width: number; tool: Tool; point: Point;
-    fillStyle?: "hachure" | "cross-hatch" | "solid" | "none";
-    fillColor?: string; roughness?: number;
-  }) => void;
-  onStrokePoint: (strokeId: string, point: Point) => void;
-  onStrokeEnd: (strokeId: string, stroke: Stroke) => void;
-  onStrokeDelete?: (strokeId: string) => void;
-  onStrokeUpdate?: (stroke: Stroke) => void;
-  onCursorMove: (point: Point, metadata?: { brushWidth: number; tool: Tool }) => void;
-  disabled?: boolean;
-  readOnly?: boolean;
-}
-
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
+// ─── Canvas component ─────────────────────────────────────────────────────────
+const Canvas = forwardRef(function Canvas(
   {
     tool, color, width,
     fillStyle, fillColor, roughness,
@@ -563,32 +479,26 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   },
   ref
 ) {
-  // ─── Three canvas layers ──────────────────────────────────────────────────
-  // Layer 0 (bgCanvas):     Dot grid — only redrawn on zoom/pan
-  // Layer 1 (histCanvas):   Completed stroke history — redrawn when strokes commit/remove
-  // Layer 2 (activeCanvas): In-progress strokes — cheap per-point incremental paint
-  const bgCanvasRef    = useRef<HTMLCanvasElement | null>(null);
-  const histCanvasRef  = useRef<HTMLCanvasElement | null>(null);
-  const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgCanvasRef    = useRef(null);
+  const histCanvasRef  = useRef(null);
+  const activeCanvasRef = useRef(null);
 
-  const bgCtxRef      = useRef<CanvasRenderingContext2D | null>(null);
-  const histCtxRef    = useRef<CanvasRenderingContext2D | null>(null);
-  const activeCtxRef  = useRef<CanvasRenderingContext2D | null>(null);
+  const bgCtxRef      = useRef(null);
+  const histCtxRef    = useRef(null);
+  const activeCtxRef  = useRef(null);
 
-  // The interaction canvas (active) also receives pointer events
-  const containerRef  = useRef<HTMLDivElement | null>(null);
+  const containerRef  = useRef(null);
 
-  const historyRef   = useRef<Stroke[]>([]);
-  const activeRef    = useRef<Map<string, Stroke>>(new Map());
+  const historyRef   = useRef([]);
+  const activeRef    = useRef(new Map());
 
-  const localStrokeIdRef   = useRef<string | null>(null);
+  const localStrokeIdRef   = useRef(null);
   const lastCursorSentRef  = useRef(0);
   const pointerActiveRef   = useRef(false);
-  const sprayIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastPointerPosRef  = useRef<Point | null>(null);
-  const shapeStartRef      = useRef<Point | null>(null);
+  const sprayIntervalRef   = useRef(null);
+  const lastPointerPosRef  = useRef(null);
+  const shapeStartRef      = useRef(null);
 
-  // Zoom/pan refs for use inside callbacks without stale closure
   const zoomRef  = useRef(zoom);
   const panXRef  = useRef(panX);
   const panYRef  = useRef(panY);
@@ -596,35 +506,28 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   useEffect(() => { panXRef.current = panX; }, [panX]);
   useEffect(() => { panYRef.current = panY; }, [panY]);
 
-  // Selection state
-  const [selectedStrokeId, setSelectedStrokeId] = useState<string | null>(null);
+  const [selectedStrokeId, setSelectedStrokeId] = useState(null);
   const isDraggingRef    = useRef(false);
-  const dragStartRef     = useRef<Point>({ x: 0, y: 0 });
-  const dragStartPointsRef = useRef<Point[]>([]);
-  const dragStartMasksRef  = useRef<StrokeMask[]>([]);
+  const dragStartRef     = useRef({ x: 0, y: 0 });
+  const dragStartPointsRef = useRef([]);
+  const dragStartMasksRef  = useRef([]);
 
-  // Panning
   const isPanningRef       = useRef(false);
-  const panStartRef        = useRef<Point>({ x: 0, y: 0 });
-  const panOffsetStartRef  = useRef<Point>({ x: 0, y: 0 });
+  const panStartRef        = useRef({ x: 0, y: 0 });
+  const panOffsetStartRef  = useRef({ x: 0, y: 0 });
 
   const [spacePressed, setSpacePressed] = useState(false);
+  const [cursorPos, setCursorPos]       = useState(null);
 
-  // Local cursor circle
-  const [cursorPos, setCursorPos]       = useState<{ x: number; y: number } | null>(null);
-  const [cursorVisible, setCursorVisible] = useState(false);
-
-  // Spacebar pan toggle
   useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.code === "Space") { e.preventDefault(); setSpacePressed(true); } };
-    const up   = (e: KeyboardEvent) => { if (e.code === "Space") setSpacePressed(false); };
+    const down = (e) => { if (e.code === "Space") { e.preventDefault(); setSpacePressed(true); } };
+    const up   = (e) => { if (e.code === "Space") setSpacePressed(false); };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
-  // Convert client coordinates → virtual canvas coordinates
-  const toVirtual = useCallback((cx: number, cy: number): Point => {
+  const toVirtual = useCallback((cx, cy) => {
     const c = activeCanvasRef.current;
     if (!c) return { x: 0, y: 0 };
     const r = c.getBoundingClientRect();
@@ -634,15 +537,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     };
   }, [zoom, panX, panY]);
 
-  // ─── Helpers to apply transform to a context ──────────────────────────────
-  const applyTransform = useCallback((ctx: CanvasRenderingContext2D) => {
+  const applyTransform = useCallback((ctx) => {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr * zoom, dpr * zoom);
     ctx.translate(panX, panY);
   }, [zoom, panX, panY]);
 
-  // ─── Redraw background grid ───────────────────────────────────────────────
   const redrawGrid = useCallback(() => {
     const bgCtx = bgCtxRef.current;
     const bgCanvas = bgCanvasRef.current;
@@ -657,8 +558,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     bgCtx.restore();
   }, [zoom, panX, panY]);
 
-  // ─── Redraw history canvas (completed strokes) ────────────────────────────
-  const redrawHistory = useCallback((strokes: Stroke[]) => {
+  const redrawHistory = useCallback((strokes) => {
     const ctx = histCtxRef.current;
     const canvas = histCanvasRef.current;
     if (!ctx || !canvas) return;
@@ -670,7 +570,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     ctx.restore();
   }, [applyTransform]);
 
-  // ─── Redraw active canvas (in-progress strokes only) ─────────────────────
   const redrawActive = useCallback(() => {
     const ctx = activeCtxRef.current;
     const canvas = activeCanvasRef.current;
@@ -683,14 +582,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     ctx.restore();
   }, [applyTransform]);
 
-  // ─── Full redraw (all layers) — called on zoom/pan/init/undo ─────────────
-  const redrawAll = useCallback((strokes: Stroke[]) => {
+  const redrawAll = useCallback((strokes) => {
     historyRef.current = strokes;
     redrawGrid();
     redrawHistory(strokes);
     redrawActive();
 
-    // Selection overlay on history canvas (harmless extra draw)
     const ctx = histCtxRef.current;
     const canvas = histCanvasRef.current;
     if (ctx && canvas && tool === "select" && selectedStrokeId) {
@@ -724,7 +621,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
   }, [redrawGrid, redrawHistory, redrawActive, applyTransform, tool, selectedStrokeId, zoom]);
 
-  // ─── Canvas resize ────────────────────────────────────────────────────────
   const resizeCanvas = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -735,10 +631,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const ws = `${rect.width}px`;
     const hs = `${rect.height}px`;
 
-    const resizeOne = (
-      canvasRef: React.RefObject<HTMLCanvasElement | null>,
-      ctxRef: React.MutableRefObject<CanvasRenderingContext2D | null>
-    ) => {
+    const resizeOne = (canvasRef, ctxRef) => {
       const c = canvasRef.current;
       if (!c) return;
       c.width  = w; c.height = h;
@@ -754,15 +647,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     redrawAll(historyRef.current);
   }, [redrawAll]);
 
-  const deleteStrokeLocal = useCallback((strokeId: string) => {
+  const deleteStrokeLocal = useCallback((strokeId) => {
     historyRef.current = historyRef.current.filter((s) => s.strokeId !== strokeId);
     redrawHistory(historyRef.current);
     onStrokeDelete?.(strokeId);
   }, [onStrokeDelete, redrawHistory]);
 
-  // Delete key for selected stroke
   useEffect(() => {
-    const onDel = (e: KeyboardEvent) => {
+    const onDel = (e) => {
       if ((e.key === "Delete" || e.key === "Backspace") && selectedStrokeId && tool === "select") {
         deleteStrokeLocal(selectedStrokeId);
         setSelectedStrokeId(null);
@@ -779,16 +671,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     return () => obs.disconnect();
   }, [resizeCanvas]);
 
-  // On zoom/pan/select changes, redraw all layers
   useEffect(() => {
     redrawAll(historyRef.current);
   }, [zoom, panX, panY, selectedStrokeId, tool, redrawAll]);
 
-  // Wheel-to-zoom (zoom centered on cursor position)
   useEffect(() => {
     const canvas = activeCanvasRef.current;
     if (!canvas) return;
-    const onWheel = (e: WheelEvent) => {
+    const onWheel = (e) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.08 : 0.93;
       const newZoom = Math.min(4, Math.max(0.2, zoom * factor));
@@ -811,13 +701,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     redrawAll,
 
     applyRemoteStrokeStart: (stroke) => {
-      // Add to active map and paint puff/initial point on active canvas
       const s = { ...stroke, points: [...stroke.points] };
       activeRef.current.set(s.strokeId, s);
-
-      // Eraser: no dot puff on start (destination-out on transparent active canvas = no-op)
       if (s.tool === "eraser" || SHAPE_TOOLS.has(s.tool) || s.tool === "spray") return;
-
       const ctx = activeCtxRef.current;
       const canvas = activeCanvasRef.current;
       if (!ctx || !canvas) return;
@@ -836,29 +722,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     applyRemoteStrokePoint: (strokeId, point) => {
       const stroke = activeRef.current.get(strokeId);
       if (!stroke) return;
-
       const prev = stroke.points[stroke.points.length - 1];
       stroke.points.push(point);
-
       const dpr = window.devicePixelRatio || 1;
       const z = zoomRef.current, px = panXRef.current, py = panYRef.current;
-
       if (stroke.tool === "eraser") {
-        // Eraser paints directly on history canvas (active canvas is transparent — no-op there)
         const histCtx = histCtxRef.current;
         if (histCtx && prev) {
           paintEraserSegmentOnHistory(histCtx, prev, point, stroke.width, z, px, py, dpr);
         }
         return;
       }
-
       const ctx = activeCtxRef.current;
       const canvas = activeCanvasRef.current;
       if (!ctx || !canvas) return;
-
       if (SHAPE_TOOLS.has(stroke.tool)) {
-        // For shapes, only update the last point then repaint active canvas
-        // (active canvas only has in-progress strokes — cheap)
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -867,7 +745,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         activeRef.current.forEach((s) => drawStrokeOnCtx(ctx, canvas, s));
         ctx.restore();
       } else if (prev) {
-        // Freehand: paint only the new segment — zero history touched
         paintIncrementalSegment(ctx, stroke, prev, point, z, px, py, dpr);
       }
     },
@@ -875,11 +752,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     applyRemoteStrokeEnd: (strokeId) => {
       const stroke = activeRef.current.get(strokeId);
       if (!stroke) return;
-
       activeRef.current.delete(strokeId);
-
       if (stroke.tool === "eraser") {
-        // Apply mask logic to history strokes (same as local eraser end)
         historyRef.current.forEach((existingStroke) => {
           const intersects = stroke.points.some((p) => hitTestWithEraser(existingStroke, p.x, p.y, stroke.width));
           if (intersects) {
@@ -890,15 +764,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             });
           }
         });
-        // Redraw history cleanly with masks applied (erases the live preview dirt)
         redrawHistory(historyRef.current);
         return;
       }
-
-      // Non-eraser: move stroke from active → history
       historyRef.current = [...historyRef.current, stroke];
-
-      // 2. Composite stroke onto history canvas (no full clear)
       const histCtx = histCtxRef.current;
       const histCanvas = histCanvasRef.current;
       if (histCtx && histCanvas) {
@@ -911,8 +780,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         drawStrokeOnCtx(histCtx, histCanvas, stroke);
         histCtx.restore();
       }
-
-      // 3. Repaint active canvas without this stroke (typically just remaining active strokes)
       const activeCtx = activeCtxRef.current;
       const activeCanvas = activeCanvasRef.current;
       if (activeCtx && activeCanvas) {
@@ -935,7 +802,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     addStroke: (stroke) => {
       historyRef.current = [...historyRef.current, stroke];
-      // Composite onto history canvas directly
       const ctx = histCtxRef.current;
       const canvas = histCanvasRef.current;
       if (ctx && canvas) {
@@ -953,8 +819,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     clearCanvas: () => {
       historyRef.current = [];
       activeRef.current.clear();
-      histCtxRef.current?.clearRect(0, 0, histCanvasRef.current?.width ?? 0, histCanvasRef.current?.height ?? 0);
-      activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
+      if (histCtxRef.current && histCanvasRef.current)
+        histCtxRef.current.clearRect(0, 0, histCanvasRef.current.width, histCanvasRef.current.height);
+      if (activeCtxRef.current && activeCanvasRef.current)
+        activeCtxRef.current.clearRect(0, 0, activeCanvasRef.current.width, activeCanvasRef.current.height);
     },
 
     updateStroke: (strokeId, updates) => {
@@ -968,8 +836,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     getStroke: (strokeId) => historyRef.current.find((s) => s.strokeId === strokeId),
   }), [redrawAll, redrawHistory]);
 
-  // Spray interval
-  const startSprayInterval = useCallback((strokeId: string) => {
+  const startSprayInterval = useCallback((strokeId) => {
     if (sprayIntervalRef.current) clearInterval(sprayIntervalRef.current);
     sprayIntervalRef.current = setInterval(() => {
       const pos = lastPointerPosRef.current;
@@ -978,8 +845,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       if (!stroke) return;
       const pointIdx = stroke.points.length;
       stroke.points.push(pos);
-
-      // Paint puff directly on active canvas
       const ctx = activeCtxRef.current;
       const canvas = activeCanvasRef.current;
       if (ctx && canvas) {
@@ -1000,8 +865,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (sprayIntervalRef.current) { clearInterval(sprayIntervalRef.current); sprayIntervalRef.current = null; }
   };
 
-  // ── Pointer handlers ──────────────────────────────────────────────────────
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e) => {
     if (disabled) return;
     const point = toVirtual(e.clientX, e.clientY);
     lastPointerPosRef.current = point;
@@ -1010,7 +874,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       isPanningRef.current = true;
       panStartRef.current = { x: e.clientX, y: e.clientY };
       panOffsetStartRef.current = { x: panX, y: panY };
-      (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+      e.target.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -1034,12 +898,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+    e.target.setPointerCapture(e.pointerId);
     pointerActiveRef.current = true;
     const strokeId = crypto.randomUUID();
     localStrokeIdRef.current = strokeId;
 
-    const stroke: Stroke = {
+    const stroke = {
       strokeId, color, width, tool, points: [point],
       fillStyle, fillColor, roughness,
     };
@@ -1048,7 +912,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (SHAPE_TOOLS.has(tool)) {
       shapeStartRef.current = point;
     } else {
-      // Paint initial puff on active canvas
       const ctx = activeCtxRef.current;
       const canvas = activeCanvasRef.current;
       if (ctx && canvas) {
@@ -1066,7 +929,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (tool === "spray") startSprayInterval(strokeId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e) => {
     const point = toVirtual(e.clientX, e.clientY);
     lastPointerPosRef.current = point;
 
@@ -1076,7 +939,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       setCursorPos({ x: e.clientX - r.left, y: e.clientY - r.top });
     }
 
-    // Throttled cursor broadcast — 80ms (was 50ms)
     const now = performance.now();
     if (!readOnly && now - lastCursorSentRef.current >= 80) {
       lastCursorSentRef.current = now;
@@ -1114,9 +976,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (!stroke) return;
 
     if (SHAPE_TOOLS.has(tool)) {
-      // For local shape preview: update last point and repaint only active canvas
       stroke.points = [stroke.points[0], point];
-
       const ctx = activeCtxRef.current;
       const actCanvas = activeCanvasRef.current;
       if (ctx && actCanvas) {
@@ -1135,17 +995,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     if (tool === "spray") return;
 
-    // Min-move threshold: 3px (was 1.5px) — halves point volume
     const prev = stroke.points[stroke.points.length - 1];
     if (prev) {
       const ddx = point.x - prev.x;
       const ddy = point.y - prev.y;
-      if (ddx * ddx + ddy * ddy < 9) return;   // 3² = 9
+      if (ddx * ddx + ddy * ddy < 9) return;
     }
 
     if (tool === "eraser") {
-      // Eraser: paint directly on history canvas for real-time visual feedback.
-      // The active canvas is transparent — destination-out there would be a no-op.
       const histCtx = histCtxRef.current;
       if (histCtx && prev) {
         paintEraserSegmentOnHistory(histCtx, prev, point, stroke.width, zoom, panX, panY, window.devicePixelRatio || 1);
@@ -1155,7 +1012,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    // All other freehand tools: incremental segment on active canvas only
     const ctx = activeCtxRef.current;
     if (ctx && prev) {
       paintIncrementalSegment(ctx, stroke, prev, point, zoom, panX, panY, window.devicePixelRatio || 1);
@@ -1203,11 +1059,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             onStrokeUpdate?.(existingStroke);
           }
         });
-        // Clear active canvas, then full history redraw (eraser changes history)
-        activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
+        if (activeCtxRef.current && activeCanvasRef.current)
+          activeCtxRef.current.clearRect(0, 0, activeCanvasRef.current.width, activeCanvasRef.current.height);
         redrawHistory(historyRef.current);
       } else {
-        // Composite local completed stroke onto history canvas
         historyRef.current = [...historyRef.current, stroke];
         const histCtx = histCtxRef.current;
         const histCanvas = histCanvasRef.current;
@@ -1220,9 +1075,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           drawStrokeOnCtx(histCtx, histCanvas, stroke);
           histCtx.restore();
         }
-        // Clear the active canvas (stroke is now on history)
-        activeCtxRef.current?.clearRect(0, 0, activeCanvasRef.current?.width ?? 0, activeCanvasRef.current?.height ?? 0);
-
+        if (activeCtxRef.current && activeCanvasRef.current)
+          activeCtxRef.current.clearRect(0, 0, activeCanvasRef.current.width, activeCanvasRef.current.height);
         onStrokeEnd(strokeId, stroke);
       }
     }
@@ -1241,17 +1095,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }`}
       onMouseLeave={() => setCursorPos(null)}
     >
-      {/* Layer 0: Background dot grid */}
       <canvas
         ref={bgCanvasRef}
         className="absolute inset-0 h-full w-full pointer-events-none bg-paper"
       />
-      {/* Layer 1: Completed stroke history */}
       <canvas
         ref={histCanvasRef}
         className="absolute inset-0 h-full w-full pointer-events-none bg-transparent"
       />
-      {/* Layer 2: Active (in-progress) strokes — also receives pointer events */}
       <canvas
         ref={activeCanvasRef}
         className="absolute inset-0 h-full w-full touch-none bg-transparent"
@@ -1262,7 +1113,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         onPointerCancel={endStroke}
       />
 
-      {/* Local circle cursor */}
       {cursorPos && !isPanningCursor && tool !== "select" && !readOnly && (
         <div
           className="pointer-events-none absolute rounded-full"

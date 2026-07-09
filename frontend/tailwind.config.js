@@ -1,14 +1,13 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
+/** @type {import('tailwindcss').Config} */
+const config = {
   darkMode: "class",
   content: [
     "./index.html",
-    "./App.tsx",
-    "./main.tsx",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./App.jsx",
+    "./main.jsx",
+    "./pages/**/*.{js,jsx}",
+    "./components/**/*.{js,jsx}",
+    "./app/**/*.{js,jsx}",
   ],
   theme: {
     extend: {
@@ -49,4 +48,5 @@ const config: Config = {
   },
   plugins: [],
 };
+
 export default config;
